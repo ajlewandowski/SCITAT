@@ -1,0 +1,139 @@
+Metadata-Version: 2.4
+Name: tatc
+Version: 3.4.10
+Summary: Tradespace Analysis Toolkit for Constellations (TAT-C)
+Author-email: "Paul T. Grogan" <paul.grogan@asu.edu>
+License: BSD License
+Project-URL: Homepage, https://tatc.readthedocs.io
+Project-URL: Repository, https://github.com/code-lab-org/tatc
+Project-URL: Documentation, https://tatc.readthedocs.io
+Project-URL: Issues, https://github.com/code-lab-org/tatc/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Classifier: Development Status :: 4 - Beta
+Requires-Python: <3.14,>=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: geopandas>=0.13.2
+Requires-Dist: joblib
+Requires-Dist: numba
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: pydantic>=2.6
+Requires-Dist: pyproj
+Requires-Dist: shapely>=2
+Requires-Dist: skyfield>=1.48
+Requires-Dist: sgp4
+Requires-Dist: spiceypy
+Requires-Dist: typing-extensions
+Requires-Dist: pyyaml
+Provides-Extra: dev
+Requires-Dist: black[jupyter]>=24.2; extra == "dev"
+Requires-Dist: coverage; extra == "dev"
+Requires-Dist: pylint; extra == "dev"
+Requires-Dist: pylint-pydantic; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: autodoc_pydantic>=2; extra == "docs"
+Requires-Dist: docutils; extra == "docs"
+Requires-Dist: myst-nb; extra == "docs"
+Requires-Dist: sphinx>=7; extra == "docs"
+Requires-Dist: sphinx-rtd-theme; extra == "docs"
+Provides-Extra: examples
+Requires-Dist: ipykernel; extra == "examples"
+Requires-Dist: matplotlib; extra == "examples"
+Requires-Dist: cartopy; extra == "examples"
+Provides-Extra: osse
+Requires-Dist: netcdf4; extra == "osse"
+Requires-Dist: pydap; extra == "osse"
+Requires-Dist: rioxarray; extra == "osse"
+Requires-Dist: scipy; extra == "osse"
+Requires-Dist: scikit-learn; extra == "osse"
+Requires-Dist: seaborn; extra == "osse"
+Dynamic: license-file
+
+# Tradespace Analysis Toolkit for Constellations (TAT-C)
+
+The Tradespace Analysis Toolkit for Constellations (TAT-C) provides low-level
+data structures and functions for systems engineering analysis and design of
+Earth-observing space missions suitable for pre-Phase A concept studies.
+
+Documentation: [https://tatc.readthedocs.io](https://tatc.readthedocs.io)
+
+Repository: [https://github.com/code-lab-org/tatc](https://github.com/code-lab-org/tatc)
+
+## Installation
+
+TAT-C uses the pip build system to manage dependencies. Install the tatc library in "editable" mode:
+```shell
+pip install -e .
+```
+
+Note: the following optional dependencies are available with bracket notation: 
+ * `pip install -e ".[dev]"`: for development (unit testing, coverage, and linting)
+ * `pip install -e ".[docs]"`: for generating documentation
+ * `pip install -e ".[examples]"`: for running optional examples
+ * `pip install -e ".[osse]"`: for running optional observing system simulation experiment (OSSE) examples
+
+Multiple optional dependencies can be installed with a comma-separated list (e.g., `pip install -e ".[dev,examples]"`)
+
+## Development Tools
+
+Development tools are applicable when working with the source code.
+
+### Unit Tests
+
+Run unit tests with:
+```shell
+python -m unittest
+```
+
+Optionally, run a test coverage report:
+```shell
+coverage run -m unittest
+```
+including html output:
+```shell
+coverage html
+```
+
+### Documentation
+
+Generate documentation from the `docs` directory using the command:
+```shell
+make html
+```
+
+### Code Style
+
+This project uses the black code style, applied from the project root:
+```shell
+black .
+```
+
+## Contact
+
+Paul T. Grogan <paul.grogan@asu.edu>
+
+## Acknowledgements
+
+This project was supported in part by the National Aeronautics and Space
+Administration (NASA) Earth Science Division (ESD) Earth Science Technology
+Office (ESTO) Advanced Information Systems Technology (AIST) program. 
+Financial support is acknowledged under NASA grant numbers: NNX17AE06G, 
+80NSSC17K0586, 80NSSC20K1118, 80NSSC21K1515, 80NSSC22K1705, 80NSSC24K0575, 
+80NSSC24K0921; NASA Jet Propulsion Laboratory subcontracts: 1689594, 1686623, 
+1704657, 1705655; Texas A \& M University subaward M2403907.
+
+Current Project Team
+ * PI: Paul T. Grogan <paul.grogan@asu.edu>
+ * I. Josue Tapia-Tamayo <josue.tapia@asu.edu>
+ * Suvan Kumar <skuma208@asu.edu>
+
+Project Alumni
+ * Isaac Feldman
+ * Hayden Daly
+ * Lindsay Portelli
+ * Matthew Sabatini
+ * Evan Abel
+ * Sigfried Hache
