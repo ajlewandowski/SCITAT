@@ -1,5 +1,5 @@
 """
-This file contains the class that accounts for image scene comparisons
+This file contains the class that accounts for image gridding and creating the heat maps
 """
 
 import numpy as np

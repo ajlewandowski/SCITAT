@@ -33,72 +33,97 @@ def runTest():
     state84 = collect_orbit_track(L8, times, coordinates = OrbitCoordinate.WGS84, sat_sunlit = True, solar_altaz = True, solar_beta = True)
     stateECI = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECI)
     stateECEF = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
-
-    lon84 = state84.geometry.x
-    lat84 = state84.geometry.y
-    alt = state84.geometry.z / 1e3
-    azi = state84.solar_az
-    elev = state84.solar_alt
     
-    head = getSatLVLHHeading(stateECI)
+    head = getSatLVLHHeading(stateECEF)
     lonCen, latCen = getGeocentricLatLon(stateECEF)
 
-    # fig, ax = plt.subplots(figsize=(8, 5))
-    # xvals = np.linspace(0, len(lat), len(lat))
-    # ax.plot(xvals, head, linewidth=2)
-    # ax.legend()
-    # ax.grid(True, alpha=0.3)
-    # plt.tight_layout()
-    # plt.show()
+    for j in range(len(head)):
+        print(head[j])
+        print(lonCen[j])
+        print(latCen[j])
 
-def getSatLVLHHeading(stateECI):
+    fig, ax = plt.subplots(figsize=(8, 5))
+    xvals = np.linspace(0, len(times), len(times))
+    ax.plot(xvals, head, linewidth=2)
+    ax.grid(True, alpha=0.3)
+    plt.savefig('satellite_heading_graphic.png')
+    print("Plot saved as satellite_heading_graphic.png")
 
-    xeci = stateECI.geometry.x / 1e3
-    yeci = stateECI.geometry.y / 1e3
-    zeci = stateECI.geometry.z / 1e3
-    vxeci = stateECI['velocity'].apply(lambda v: v.x) / 1e3
-    vyeci = stateECI['velocity'].apply(lambda v: v.y) / 1e3
-    vzeci = stateECI['velocity'].apply(lambda v: v.z) / 1e3
-    state = np.vstack([xeci, yeci, zeci, vxeci, vyeci, vzeci])
-    head = np.zeros((len(state[0,:]),1))
+def getSatLVLHHeading(stateECEF):
+
+    xecef = stateECEF['geometry'].apply(lambda p: p.x).values / 1e3
+    yecef = stateECEF['geometry'].apply(lambda p: p.y).values / 1e3
+    zecef = stateECEF['geometry'].apply(lambda p: p.z).values / 1e3
+    vxecef = stateECEF['velocity'].apply(lambda v: v.x).values / 1e3
+    vyecef = stateECEF['velocity'].apply(lambda v: v.y).values / 1e3
+    vzecef = stateECEF['velocity'].apply(lambda v: v.z).values / 1e3
+    
+    head = np.zeros(len(xecef))
 
     for k in range(len(head)):
-        rECI = state[:3,k]
-        vECI = state[3:,k]
 
-        rNPsat = np.array([0 - rECI[0], 0 - rECI[1], 6356.7523 - rECI[2]])
+        rECEF = np.array([xecef[k], yecef[k], zecef[k]])
+        vECEF = np.array([vxecef[k], vyecef[k], vzecef[k]])
 
-        eci2lvlh = ECI2LVLH(rECI, vECI)
+        T = ECEF2LVLH(rECEF, vECEF)
 
-        rNP = eci2lvlh @ rNPsat
-        vSat = eci2lvlh @ vECI
-        vSatNorm = np.linalg.norm(vSat)
-        rNPNorm = np.linalg.norm(rNP)
+        northLVLH = getLocalNorthInLVLH(rECEF)
 
-        theta = np.arccos(np.dot(rNP, (vSat / vSatNorm)) / (vSatNorm * rNPNorm))
+        vLVLH = T @ vECEF
+        vLVLHnorm = vLVLH / np.linalg.norm(vLVLH)
+    
+        angle = np.degrees(np.arctan2(northLVLH[1], northLVLH[0]))
+        velAngle = np.degrees(np.arctan2(vLVLHnorm[1], vLVLHnorm[0]))
 
-        head[k] = np.degrees(theta) % 360
+        head[k] = np.degrees(velAngle - angle) % 360
 
     return head
 
-def ECI2LVLH(rECI, vECI):
-        r = rECI / np.linalg.norm(rECI)
-        v = vECI / np.linalg.norm(vECI)
+def ECEF2LVLH(rECEF, vECEF):
         
-        ez = -r
-        ex = v - np.dot(v, ez) * ez
+    ez = -rECEF / np.linalg.norm(rECEF)
+
+    ey = -np.cross(rECEF, vECEF)
+    ey /= np.linalg.norm(ey)
+
+    vNorm = np.linalg.norm(vECEF)
+    if vNorm == 0:
+        ex = np.array([1, 0, 0])
+    else:
+        ex = np.cross(ey, ez)
         ex /= np.linalg.norm(ex)
-        ey = np.cross(ez, ex)
-        ey /= np.linalg.norm(ey)
+    
+    # ey = np.cross(ez, ex)
+    # eyNorm = np.linalg.norm(ey)
+    # if eyNorm == 0:
+    #     ex = np.array([1, 0, 0])
+    #     ey = np.cross(ez, ex)
 
-        return np.array([ex, ey, ez])
+    # ey /= np.linalg.norm(ey)
 
-def getGeocentricLatLon(coords):
+    return np.array([ex, ey, ez])
 
-    xecef = coords.geometry.x / 1e3
-    yecef = coords.geometry.y / 1e3
-    zecef = coords.geometry.z / 1e3
+def getLocalNorthInLVLH(rECEF):
+     
+    k = np.array([0, 0, 1])
 
+    ez = -rECEF / np.linalg.norm(rECEF)
+
+    northECEF = k - np.dot(k, ez) * ez
+    northECEF /= np.linalg.norm(northECEF)
+
+    T = ECEF2LVLH(rECEF, np.zeros_like(rECEF))
+
+    northLVLH = T @ northECEF
+
+    return northLVLH
+
+def getGeocentricLatLon(stateECEF):
+
+    xecef = stateECEF['geometry'].apply(lambda p: p.x).values / 1e3
+    yecef = stateECEF['geometry'].apply(lambda p: p.y).values / 1e3
+    zecef = stateECEF['geometry'].apply(lambda p: p.z).values / 1e3
+    
     lats = np.zeros((len(xecef),1))
     lons = np.zeros((len(xecef),1))
 

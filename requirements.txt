@@ -13,3 +13,5 @@ skyfield>=1.48
 spiceypy>=6.0.0
 typing-extensions
 pyyaml
+cartopy
+requests
