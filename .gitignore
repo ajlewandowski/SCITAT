@@ -2,5 +2,4 @@
 __pycache__/
 *.pyc
 tatc/resources/de421.bsp
-
 *.png
