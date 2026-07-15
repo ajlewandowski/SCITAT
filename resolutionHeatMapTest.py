@@ -3,6 +3,7 @@ Gridding and resolution heat map test file
 """
 
 import numpy as np
+from pathlib import Path
 import matplotlib.pyplot as plt
 from tatc import utils
 from tatc.schemas import Instrument, Satellite, TwoLineElements
@@ -65,22 +66,22 @@ def runTest():
 
     # plotNadirBaseArray(state84, sens, times, 705)
 
-    getOffNad2DArray(sens, 705000, 0, 0)
-    getOffNad2DArray(sens, 705000, 5, 0)
-    getOffNad2DArray(sens, 705000, 10, 0)
-    getOffNad2DArray(sens, 705000, 15, 0)
-    getOffNad2DArray(sens, 705000, 0, 5)
-    getOffNad2DArray(sens, 705000, 5, 5)
-    getOffNad2DArray(sens, 705000, 10, 5)
-    getOffNad2DArray(sens, 705000, 15, 5)
-    getOffNad2DArray(sens, 705000, 0, 10)
-    getOffNad2DArray(sens, 705000, 5, 10)
-    getOffNad2DArray(sens, 705000, 10, 10)
-    getOffNad2DArray(sens, 705000, 15, 10)
-    getOffNad2DArray(sens, 705000, 0, 15)
-    getOffNad2DArray(sens, 705000, 5, 15)
-    getOffNad2DArray(sens, 705000, 10, 15)
-    getOffNad2DArray(sens, 705000, 15, 15)
+    # getOffNad2DArray(sens, 705000, 0, 0)
+    # getOffNad2DArray(sens, 705000, 5, 0)
+    # getOffNad2DArray(sens, 705000, 10, 0)
+    # getOffNad2DArray(sens, 705000, 15, 0)
+    # getOffNad2DArray(sens, 705000, 0, 5)
+    # getOffNad2DArray(sens, 705000, 5, 5)
+    # getOffNad2DArray(sens, 705000, 10, 5)
+    # getOffNad2DArray(sens, 705000, 15, 5)
+    # getOffNad2DArray(sens, 705000, 0, 10)
+    # getOffNad2DArray(sens, 705000, 5, 10)
+    # getOffNad2DArray(sens, 705000, 10, 10)
+    # getOffNad2DArray(sens, 705000, 15, 10)
+    # getOffNad2DArray(sens, 705000, 0, 15)
+    # getOffNad2DArray(sens, 705000, 5, 15)
+    # getOffNad2DArray(sens, 705000, 10, 15)
+    getOffNad2DArray(sens, 705000, 1, 1)
 
 def getOffNad2DArray(sens, altitude, fore, starboard):
     # fore is forward/backward angle - fore is the positive and aft negative
@@ -133,10 +134,14 @@ def getOffNad2DArray(sens, altitude, fore, starboard):
     ax.set_xlabel('Starboard/Port Direction (°)')
     ax.set_ylabel('Fore/Aft Direction (°)')
     ax.set_title(f'Pixel-by-Pixel GSD Off-Nadir ({fore}°,{starboard}°)')
-    plt.savefig(f'fov_skew_2Darray_offnadir_({fore},{starboard}).png')
+
+    outDir = Path("C:/Users/alecl/OneDrive/Desktop/Graphics")
+    fileName = f'fov_skew_2Darray_offnadir_({fore},{starboard}).png'
+    fullPath = outDir / fileName
+
+    plt.savefig(fullPath)
     print(f"Plot saved as fov_skew_2Darray_offnadir_({fore},{starboard}).png")
     
-
 
 def getOffNadOLIArray(state84, sens, times, angle):
 
