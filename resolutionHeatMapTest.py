@@ -3,6 +3,7 @@ Gridding and resolution heat map test file
 """
 
 import numpy as np
+import os
 from pathlib import Path
 import matplotlib.pyplot as plt
 from tatc import utils
@@ -66,22 +67,12 @@ def runTest():
 
     # plotNadirBaseArray(state84, sens, times, 705)
 
-    # getOffNad2DArray(sens, 705000, 0, 0)
-    # getOffNad2DArray(sens, 705000, 5, 0)
-    # getOffNad2DArray(sens, 705000, 10, 0)
-    # getOffNad2DArray(sens, 705000, 15, 0)
-    # getOffNad2DArray(sens, 705000, 0, 5)
-    # getOffNad2DArray(sens, 705000, 5, 5)
-    # getOffNad2DArray(sens, 705000, 10, 5)
-    # getOffNad2DArray(sens, 705000, 15, 5)
-    # getOffNad2DArray(sens, 705000, 0, 10)
-    # getOffNad2DArray(sens, 705000, 5, 10)
-    # getOffNad2DArray(sens, 705000, 10, 10)
-    # getOffNad2DArray(sens, 705000, 15, 10)
-    # getOffNad2DArray(sens, 705000, 0, 15)
-    # getOffNad2DArray(sens, 705000, 5, 15)
-    # getOffNad2DArray(sens, 705000, 10, 15)
-    getOffNad2DArray(sens, 705000, 1, 1)
+    # The following 4 lines of code runs a very long simulation to create heatmaps for 81 different viewing scenarios
+    # offNadVec = np.array([0.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0])
+    # for k in range(len(offNadVec)):
+    #     for j in range(len(offNadVec)):
+    #         getOffNad2DArray(sens, 705000, offNadVec[k], offNadVec[j])
+    
 
 def getOffNad2DArray(sens, altitude, fore, starboard):
     # fore is forward/backward angle - fore is the positive and aft negative
@@ -141,6 +132,10 @@ def getOffNad2DArray(sens, altitude, fore, starboard):
 
     plt.savefig(fullPath)
     print(f"Plot saved as fov_skew_2Darray_offnadir_({fore},{starboard}).png")
+
+    matFileName = f'fov_skew_2Darray_matrix_offnadir_({fore},{starboard}).npy'
+    fullMatPath = outDir / matFileName
+    np.save(fullMatPath, GSDs)
     
 
 def getOffNadOLIArray(state84, sens, times, angle):
