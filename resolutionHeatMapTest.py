@@ -72,6 +72,10 @@ def runTest():
     # for k in range(len(offNadVec)):
     #     for j in range(len(offNadVec)):
     #         getOffNad2DArray(sens, 705000, offNadVec[k], offNadVec[j])
+
+    mat = np.load(Path('C:/Users/alecl/OneDrive/Desktop/Graphics/fov_skew_2Darray_matrix_offnadir_(0.0,10.0).npy'))
+    print(mat)
+    print(mat.shape)
     
 
 def getOffNad2DArray(sens, altitude, fore, starboard):
