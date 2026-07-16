@@ -14,6 +14,7 @@ from tatc.analysis import collect_orbit_track, OrbitCoordinate, OrbitOutput
 
 wgsSMA = 6378137.0
 wgsf = 1 / 298.257223563
+ae = 6378137
 
 def runTest():
     print()
@@ -71,14 +72,25 @@ def runTest():
     # offNadVec = np.array([0.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0])
     # for k in range(len(offNadVec)):
     #     for j in range(len(offNadVec)):
-    #         getOffNad2DArray(sens, 705000, offNadVec[k], offNadVec[j])
+    #         getOffNad2DArrayFlat(sens, 705000, offNadVec[k], offNadVec[j])
 
-    mat = np.load(Path('C:/Users/alecl/OneDrive/Desktop/Graphics/fov_skew_2Darray_matrix_offnadir_(0.0,10.0).npy'))
-    print(mat)
-    print(mat.shape)
+    # mat = np.load(Path('C:/Users/alecl/OneDrive/Desktop/Graphics/fov_skew_2Darray_matrix_offnadir_(17.5,10.0).npy'))
+    # print(mat)
+    # print(mat.shape)
+
+    # getOffNad2DArrayFlat(sens, 705000, 5.0, 5.0)
+
+    # getOffNad2DArraySpherical(sens, 705000, 0, 0)
+
+    # The following 4 lines of code runs a very long simulation to create heatmaps for 81 different viewing scenarios
+    offNadVec = np.array([0.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0])
+    # Still need to do (10.0, 7.5)+
+    for k in range(len(offNadVec)):
+        for j in range(len(offNadVec)):
+            getOffNad2DArraySpherical(sens, 705000, offNadVec[k], offNadVec[j])
     
 
-def getOffNad2DArray(sens, altitude, fore, starboard):
+def getOffNad2DArrayFlat(sens, altitude, fore, starboard):
     # fore is forward/backward angle - fore is the positive and aft negative
     # starboard is right/left angle - starboard is the positive to the right, port negative to the left
 
@@ -86,28 +98,28 @@ def getOffNad2DArray(sens, altitude, fore, starboard):
     alt = altitude
 
     # Creating a series of off-nadir angles for Landsat-8 (15 deg fov)
-    angFore = fore * (np.pi/180)
-    angVecFore = np.linspace(-sens[0]/2 + angFore, sens[0]/2 + angFore, int(sens[2]))
+    angFore = np.deg2rad(fore)
+    angVecFore = np.linspace(-sens[0]/2 + angFore, sens[0]/2 + angFore, int(sens[2]) + 1)
 
-    angStar = starboard * (np.pi/180)
-    angVecStar = np.linspace(-sens[0]/2 + angStar, sens[0]/2 + angStar, int(sens[2]))
+    angStar = np.deg2rad(starboard)
+    angVecStar = np.linspace(-sens[0]/2 + angStar, sens[0]/2 + angStar, int(sens[2]) + 1)
 
     # Initializing the 2D array and spreads of GSDs
-    GSDsFore = np.zeros(len(angVecFore))
-    GSDsStar = np.zeros(len(angVecStar))
-    for k in range(len(angVecFore)):
-        rangeVec = alt / np.cos(angVecFore[k])
+    GSDsFore = np.zeros(len(angVecFore) - 1)
+    GSDsStar = np.zeros(len(angVecStar) - 1)
+    for k in range(len(angVecFore) - 1):
+        rangeVec = alt / np.cos(angVecFore[k] + IFOVbase*0.5)
         GSDbase = IFOVbase * rangeVec
-        GSDsFore[k] = GSDbase / np.cos(angVecFore[k])
+        GSDsFore[k] = GSDbase / np.cos(angVecFore[k] + IFOVbase*0.5)
 
-        rangeVec = alt / np.cos(angVecStar[k])
+        rangeVec = alt / np.cos(angVecStar[k] + IFOVbase*0.5)
         GSDbase = IFOVbase * rangeVec
-        GSDsStar[k] = GSDbase / np.cos(angVecStar[k])
+        GSDsStar[k] = GSDbase / np.cos(angVecStar[k] + IFOVbase*0.5)
 
     # Creating the 2D array with the skewed multi-directional angles
-    GSDs = np.zeros((len(angVecFore), len(angVecStar)))
-    for k in range(len(angVecFore)):
-        for j in range(len(angVecStar)):
+    GSDs = np.zeros((len(GSDsFore), len(GSDsStar)))
+    for k in range(len(GSDsFore)):
+        for j in range(len(GSDsStar)):
             GSDs[k,j] = np.sqrt(GSDsFore[k] * GSDsStar[j])
 
     nRow = GSDs.shape[0]
@@ -130,7 +142,7 @@ def getOffNad2DArray(sens, altitude, fore, starboard):
     ax.set_ylabel('Fore/Aft Direction (°)')
     ax.set_title(f'Pixel-by-Pixel GSD Off-Nadir ({fore}°,{starboard}°)')
 
-    outDir = Path("C:/Users/alecl/OneDrive/Desktop/Graphics")
+    outDir = Path("C:/Users/alecl/OneDrive/Desktop/Graphics/SimpleHeatmap")
     fileName = f'fov_skew_2Darray_offnadir_({fore},{starboard}).png'
     fullPath = outDir / fileName
 
@@ -140,6 +152,77 @@ def getOffNad2DArray(sens, altitude, fore, starboard):
     matFileName = f'fov_skew_2Darray_matrix_offnadir_({fore},{starboard}).npy'
     fullMatPath = outDir / matFileName
     np.save(fullMatPath, GSDs)
+
+def getOffNad2DArraySpherical(sens, altitude, fore, starboard):
+
+    IFOVbase = sens[0] / sens[2]
+    alt = altitude
+
+    # Creating a series of off-nadir angles for Landsat-8 (15 deg fov)
+    angFore = np.deg2rad(fore)
+    angVecFore = np.linspace(-sens[0]/2 + angFore, sens[0]/2 + angFore, int(sens[2]) + 1)
+
+    angStar = np.deg2rad(starboard)
+    angVecStar = np.linspace(-sens[0]/2 + angStar, sens[0]/2 + angStar, int(sens[2]) + 1)
+
+    lamFore = np.zeros(len(angVecFore))
+    lamStar = np.zeros(len(angVecStar))
+    for k in range(len(angVecFore)):
+        lamFore[k] = getEarthCentralAngle(altitude, angVecFore[k])
+        lamStar[k] = getEarthCentralAngle(altitude, angVecStar[k])
+        # rho = (altitude + ae*(1 - np.cos(lam))) / np.cos(angVecFore[k] + IFOVbase*0.5)
+        # print(rho)
+
+
+    # maximum look angle - sin(eta) = ae / (altitude + ae)
+
+    arcs = np.zeros((len(lamFore)-1,len(lamStar) - 1))
+    for j in range(len(lamFore) - 1):
+        dLamFore = lamFore[j+1] - lamFore[j]
+        for k in range(len(lamStar) - 1):
+            dLamStar = lamStar[k+1] - lamStar[k]
+            A = abs(4 * ae**2 * np.arcsin(np.sin(dLamFore/2)*np.sin(dLamStar/2)))
+            arcs[j,k] = np.sqrt(A)
+
+    nRow = arcs.shape[0]
+    nCol = arcs.shape[1]
+    selectIndRow = [0, nRow // 4, nRow // 2, nRow - 1 - (nRow // 4), nRow - 1]
+    selectIndCol = [0, nCol // 4, nCol // 2, nCol - 1 - (nCol // 4), nCol - 1]
+
+
+    # Plot GSD over array 
+    fig, ax = plt.subplots(figsize=(10, 8))
+    im = ax.imshow(arcs, origin='lower', cmap='coolwarm', interpolation='nearest')
+    cbar = fig.colorbar(im)
+    cbar.set_label('Ground Sampling Distance (m)')
+    stepRow = (nRow - 1) / (len(selectIndRow) - 1)
+    stepCol = (nCol - 1) / (len(selectIndCol) - 1)
+    ax.set_yticks(np.arange(0, nRow, stepRow))
+    ax.set_xticks(np.arange(0, nCol, stepCol))
+    ax.set_xticklabels(np.round(np.rad2deg(angVecStar[selectIndRow]), decimals=2))
+    ax.set_yticklabels(np.round(np.rad2deg(angVecFore[selectIndCol]), decimals=2))
+    ax.set_xlabel('Starboard/Port Direction (°)')
+    ax.set_ylabel('Fore/Aft Direction (°)')
+    ax.set_title(f'Pixel-by-Pixel GSD Off-Nadir ({fore}°,{starboard}°)')
+    plt.savefig(f"fov_skew_2Darray_spherical_offnadir_({fore},{starboard}).png")
+
+    outDir = Path("C:/Users/alecl/OneDrive/Desktop/Graphics/SphericalHeatmap")
+    fileName = f'fov_skew_2Darray_spherical_offnadir_({fore},{starboard}).png'
+    fullPath = outDir / fileName
+
+    plt.savefig(fullPath)
+    print(f"Plot saved as fov_skew_2Darray_spherical_offnadir_({fore},{starboard}).png")
+
+    matFileName = f'fov_skew_2Darray_spherical_matrix_offnadir_({fore},{starboard}).npy'
+    fullMatPath = outDir / matFileName
+    np.save(fullMatPath, arcs)
+    print(f"Array saved as fov_skew_2Darray_spherical_matrix_offnadir_({fore},{starboard}).npy")
+
+
+def getEarthCentralAngle(altitude, offNadAngle):
+
+    return np.arcsin(np.sin(offNadAngle) * (ae + altitude) / ae) - offNadAngle
+
     
 
 def getOffNadOLIArray(state84, sens, times, angle):
@@ -149,14 +232,14 @@ def getOffNadOLIArray(state84, sens, times, angle):
     time84 = pd.Series(times)
 
     # This test is going to look at an off-nadir angle, only sideways of 10 degrees
-    offNadAngle = angle * (np.pi/180)
-    angVec = np.linspace(-sens[0]/2 + offNadAngle, sens[0]/2 + offNadAngle, int(sens[2]))
-    GSDsNow = np.zeros((len(alts84), len(angVec)))
+    offNadAngle = np.deg2rad(angle)
+    angVec = np.linspace(-sens[0]/2 + offNadAngle, sens[0]/2 + offNadAngle, int(sens[2]) + 1)
+    GSDsNow = np.zeros((len(alts84), len(angVec) - 1))
     for k in range(len(alts84)):
-        rangeVec = alts84[k] / np.cos(angVec)
+        rangeVec = alts84[k] / np.cos(angVec[:-1] + 0.5*IFOVbase)
         GSDbase = IFOVbase * rangeVec
-        for j in range(len(angVec)):
-            GSDsNow[k,j] = GSDbase[j] / np.cos(angVec[j])
+        for j in range(len(angVec) - 1):
+            GSDsNow[k,j] = GSDbase[j] / np.cos(angVec[j] + 0.5*IFOVbase)
 
     nRow = GSDsNow.shape[0]
     nCol = GSDsNow.shape[1]
@@ -226,7 +309,6 @@ def projectVelo2Surface(rECEF, vECEF):
     vRad = np.dot(vECEF, rNorm) * rNorm
 
     return vECEF - vRad
-
 
 def getTrueNorthInECEF(lat, lon):
     lat = np.radians(lat)
