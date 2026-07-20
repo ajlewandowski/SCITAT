@@ -1,42 +1,71 @@
 from datetime import datetime, timedelta, timezone
 from sgp4.api import Satrec
 from pathlib import Path
-
+import os
 
 class getTLEData:
-    def __init__(self, time, noradID):
-        self.time = time
-        self.noradID = noradID
+    def __init__(self, fileName, tlePath):
+        self.tlePath = tlePath
+        self.fileName = fileName
+        if not os.path.exists(tlePath):
+            raise FileNotFoundError(f"The file {fileName} was not found or does not exist.")
 
-    def tle2oe(self, line1, line2):
-        """Convert TLE to classical orbital elements array"""
-        sat = Satrec.twoline2rv(line1, line2)
+    def readTLEFile(self):
+        """ Reads the TLE file and stores the data """
+        with open(self.tlePath, 'r') as file:
+            while True:
+                name = file.readline().strip()
+                if not name:
+                    break
+                line1 = file.readline().strip()
+                line2 = file.readline().strip()
+                yield (name, line1, line2)
 
-        year = sat.epochyr
-        if year < 57:
-            year += 2000
-        else:
-            year += 1900
+    def parseTLEEpoch(self, line1):
+        """ Parses the epoch from the first TLE line. """
+        year = int(line1[18:20]) + 2000
+        day = float(line1[20:32])
+        return datetime(year, 1, 1) + timedelta(days=day - 1)
+    
+    def parseTargetTime(self, target):
+        return datetime.strptime(target, "%Y-%m-%dT%H:%M:%S")
+    
+    def findClosestTLE(self, target, noradID):
+        """ Finds the closest TLE to the desired target epoch """
+        targTime = self.parseTargetTime(target)
+        closestTLE = None
+        smallDiff = float('inf')
+
+        for name, line1, line2 in self.readTLEFile():
+            if f' {noradID} ' in name:
+                epochTime = self.parseTLEEpoch(line1)
+                timeDiff = abs((epochTime - targTime).total_seconds())
+                if timeDiff < smallDiff:
+                    smallDiff = timeDiff
+                    closestTLE = (name, line1, line2, epochTime)
         
-        # epochdays is day of year with fractional component
-        epoch = datetime(year, 1, 1, tzinfo=timezone.utc) + timedelta(days=sat.epochdays - 1)
-
-        coe = (sat.a * 6378.137, sat.ecco, sat.inclo, sat.nodeo, sat.argpo, sat.mo)
-
-        return coe, epoch.strftime('%Y-%m-%dT%H:%M:%S')
+        return closestTLE
     
-    def getTimeData(self, epochUTC, endEpochUTC):
-
-        ep1 = datetime.fromisoformat(epochUTC).replace(tzinfo=timezone.utc)
-        ep2 = datetime.fromisoformat(endEpochUTC).replace(tzinfo=timezone.utc)
-        deltaT = ep2 - ep1
-        tSpan = deltaT.total_seconds()
-
-        return ep1, ep2, deltaT, tSpan
+    def getTLE(self, target, noradID):
+        """ Returns the TLE data for the given NORAD ID and target time """
+        tle = self.findClosestTLE(target, noradID)
+        if tle is None:
+            raise ValueError(f"No TLE found for NORAD ID {noradID} at the specified time.")
+        return tle
     
-    def printTLE(self, tle):
-
+    def printTLE(self, target, noradID):
+        """ Prints the TLE data for the given NORAD ID and target time. """
+        name, line1, line2, epochTime = self.getTLE(target, noradID)
         print()
         print("TLE Obtained from Space-Tracker")
-        print(tle[1])  # Line 1
-        print(tle[2])  # Line 2  
+        print(line1)  # Line 1
+        print(line2)  # Line 2  
+
+    def outputTLE(self, target, noradID):
+        """ Outputs the TLE data for the given NORAD ID and target time as a string. """
+        name, line1, line2, epochTime = self.getTLE(target, noradID)
+        return f"{name}\n{line1}\n{line2}"
+    
+    def outputCloseTLETime(self, target, noradID):
+        _, _, _, epochTime = self.getTLE(target, noradID)
+        return epochTime.strftime("%Y-%m-%dT%H:%M:%S")

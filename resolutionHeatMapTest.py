@@ -3,13 +3,12 @@ Gridding and resolution heat map test file
 """
 
 import numpy as np
-import os
 from pathlib import Path
-import matplotlib.pyplot as plt
+from imageGridding import imageGridding
 from tatc import utils
 from tatc.schemas import Instrument, Satellite, TwoLineElements
 import pandas as pd
-from SpaceTrackAPIClass import SpaceTrackAPI
+from getTLEData import getTLEData
 from tatc.analysis import collect_orbit_track, OrbitCoordinate, OrbitOutput
 
 wgsSMA = 6378137.0
@@ -23,10 +22,19 @@ def runTest():
 
     # This step is defining parameters of Landsat-8 and its orbit, as well as finding the closest epoch to the desired
     # image time (imTime). This section will collect the ground track of the orbit.
-    username = "alec.lewandowski@utexas.edu"
-    password = "!Lew3dglatutaustin"
     imTime = ["2025-12-30T17:00:00", "2025-12-30T17:03:24"]
     noradID = 49260
+
+    tlePath = Path("D:\Users\al62352\SpaceTrackTLE\data\exports\tle2025.txt")
+    tles = getTLEData(tlePath)
+    try:
+        tles.printTLE(imTime[0], noradID)
+        tleStrings = tles.outputTLE(imTime[0], noradID)
+        closeTime = tles.outputCloseTLETime(imTime[0], noradID)
+        print("\nOutput as string")
+        print(tleStrings)
+    except ValueError as e:
+        print(e)
 
     #                  FOV, Focal, Pixel #, GSD, Swath, Alt
     sens = np.array([np.deg2rad(15.0), 0.886, 6196, 30, 185000, 705000])
@@ -34,12 +42,6 @@ def runTest():
     target = np.array([30.30617, -97.88121])
     imCorner = np.array([[31.35457, -99.06834],[31.33346, -96.67196],[29.23974, -96.72091],[29.25915, -99.06690]])
 
-    # try:
-    #     data = SpaceTrackAPI(username, password)
-    #     tles, closeTime = data.getTLEatEpoch(noradID, imTime)
-    # except Exception as e:
-    #     print(f"Error fetching TLEs: {e}")
-    #     return
 
     oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
     L8 = Satellite(name="Landsat-8",
@@ -49,9 +51,10 @@ def runTest():
     stateECI = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECI)
     stateECEF = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
 
-    from imageGridding import imageGridding
+    
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target, 5.0)
-    gridded.getOffNad2DArrayFlat(705000, 5.0, 5.0)
+    # gridded.getOffNad2DArrayFlat(705000, 5.0, 5.0)
+    gridded.plotNadirBaseArray(705000)
 
 
 if __name__ == "__main__":
