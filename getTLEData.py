@@ -60,6 +60,7 @@ class getTLEData:
         print("TLE Obtained from Space-Tracker")
         print(line1)  # Line 1
         print(line2)  # Line 2  
+        return name, line1, line2, epochTime.strftime("%Y-%m-%dT%H:%M:%S")
 
     def outputTLE(self, target, noradID):
         """ Outputs the TLE data for the given NORAD ID and target time as a string. """

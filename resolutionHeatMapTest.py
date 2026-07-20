@@ -25,14 +25,14 @@ def runTest():
     imTime = ["2025-12-30T17:00:00", "2025-12-30T17:03:24"]
     noradID = 49260
 
-    tlePath = Path("D:\Users\al62352\SpaceTrackTLE\data\exports\tle2025.txt")
-    tles = getTLEData(tlePath)
+    tlePath = Path(r"D:\Users\al62352\SpaceTrackTLE\data\exports\tle2025.txt")
+    tles = getTLEData("tle2025.txt", tlePath)
     try:
-        tles.printTLE(imTime[0], noradID)
-        tleStrings = tles.outputTLE(imTime[0], noradID)
-        closeTime = tles.outputCloseTLETime(imTime[0], noradID)
+        name, line1, line2, closeTime = tles.printTLE(imTime[0], noradID)
         print("\nOutput as string")
-        print(tleStrings)
+        print(name)
+        print(line1)
+        print(line2)
     except ValueError as e:
         print(e)
 
@@ -42,15 +42,15 @@ def runTest():
     target = np.array([30.30617, -97.88121])
     imCorner = np.array([[31.35457, -99.06834],[31.33346, -96.67196],[29.23974, -96.72091],[29.25915, -99.06690]])
 
-
     oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
     L8 = Satellite(name="Landsat-8",
         orbit=TwoLineElements(tle=[tles[1],tles[2]]), instruments=[oli])
     times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
     state84 = collect_orbit_track(L8, times, coordinates = OrbitCoordinate.WGS84, sat_sunlit = True, solar_altaz = True, solar_beta = True)
-    stateECI = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECI)
+    # stateECI = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECI)
     stateECEF = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
-
+    state84.to_csv("state84_LS8.csv", index=False)
+    stateECEF.to_csv("stateECEF_LS8.csv", index=False)
     
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target, 5.0)
     # gridded.getOffNad2DArrayFlat(705000, 5.0, 5.0)
