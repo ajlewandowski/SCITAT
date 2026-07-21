@@ -28,7 +28,7 @@ def runTest():
     tlePath = Path(r"D:\Users\al62352\SpaceTrackTLE\tle49260.txt")
     tles = getTLEData(tlePath)
     try:
-        line1, line2, closeTime = tles.printTLE(imTime[0], noradID)
+        line1, line2, closeTime = tles.print_tle(imTime[0])
         print("\nOutput as string")
         print(line1)
         print(line2)
