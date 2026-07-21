@@ -2,15 +2,12 @@
 USGS Test Files
 """
 import numpy as np
-from sceneComp import sceneComp
-import spiceypy as spice
 from pathlib import Path
-from groundCovClass import groundCovClass
 import matplotlib.pyplot as plt
 from tatc import utils
 from tatc.schemas import Instrument, Satellite, TwoLineElements
 import pandas as pd
-from SpaceTrackAPIClass import SpaceTrackAPI
+from getTLEData import getTLEData
 from tatc.analysis import collect_orbit_track
 
 def runTest1():
@@ -19,19 +16,21 @@ def runTest1():
     print()
     username = "alec.lewandowski@utexas.edu"
     password = "!Lew3dglatutaustin"
-    imTime = ["2026-02-24T17:00:00","2026-02-24T17:03:00"]
+    imTime = ["2025-12-22T17:00:00", "2025-12-22T17:03:15"]
     noradID = 39084
-    sens = np.array([0.886, 30, 705000, 15]) # given sensor spec online effective focal length (m), GSD (m), alt (m), FOV camera (deg)
-    solarAngles = np.array([43.49205340, 144.28168047])
-    target = np.array([30.30599, -97.88363])
-    imCorner = np.array([[31.35457, -99.07150], [31.33346, -96.67196], [29.23704, -96.72097],[29.25644, -99.06999]])
+    sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
+    solarAngles = np.array([32.34603894, 156.26970520])
+    target = np.array([30.30635, -97.86956])
+    imCorner = np.array([[31.35457, -99.05888], [31.33324, -96.65936], [29.23683, -96.70863],[29.25645, -99.05764]])
 
-    data = SpaceTrackAPI(username, password)
-    tles, closeTime = data.getTLEatEpoch(noradID, imTime)
+    tlePath = Path(r"D:\Users\al62352\SpaceTrackTLE\tle39084.txt")
+    tles = getTLEData(tlePath)
+    line1, line2, closeTime = tles.printTLE(imTime[0])
+    print()
 
     oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
     L8 = Satellite(name="Landsat-8",
-        orbit=TwoLineElements(tle=[tles[1],tles[2]]),instruments=[oli])
+        orbit=TwoLineElements(tle=[line1,line2]),instruments=[oli])
     times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
     results = collect_orbit_track(L8, times, sat_sunlit = True, solar_altaz = True, solar_beta = True)
     lon = results.geometry.x
@@ -57,19 +56,21 @@ def runTest2():
     print()
     username = "alec.lewandowski@utexas.edu"
     password = "!Lew3dglatutaustin"
-    imTime = ["2025-12-22T17:00:00", "2025-12-22T17:03:15"]
+    imTime = ["2025-12-06T17:00:00", "2025-12-06T17:03:16"]
     noradID = 39084
     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
-    solarAngles = np.array([32.34603894, 156.26970520])
-    target = np.array([30.30635, -97.86956])
-    imCorner = np.array([[31.35457, -99.05888], [31.33324, -96.65936], [29.23683, -96.70863],[29.25645, -99.05764]])
+    solarAngles = np.array([33.78604596, 157.84150300])
+    target = np.array([30.30633, -97.86138])
+    imCorner = np.array([[31.35728, -99.04942],[31.33577, -96.64984],[29.23667, -96.69938],[29.25645, -99.04837]])
 
-    data = SpaceTrackAPI(username, password)
-    tles, closeTime = data.getTLEatEpoch(noradID, imTime)
+    tlePath = Path(r"D:\Users\al62352\SpaceTrackTLE\tle39084.txt")
+    tles = getTLEData(tlePath)
+    line1, line2, closeTime = tles.printTLE(imTime[0])
+    print()
 
     oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
     L8 = Satellite(name="Landsat-8",
-        orbit=TwoLineElements(tle=[tles[1],tles[2]]),instruments=[oli])
+        orbit=TwoLineElements(tle=[line1,line2]),instruments=[oli])
     times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
     results = collect_orbit_track(L8, times, sat_sunlit = True, solar_altaz = True, solar_beta = True)
     lon = results.geometry.x
@@ -95,19 +96,21 @@ def runTest3():
     print()
     username = "alec.lewandowski@utexas.edu"
     password = "!Lew3dglatutaustin"
-    imTime = ["2025-12-06T17:00:00", "2025-12-06T17:03:16"]
+    imTime = ["2025-11-20T17:00:00", "2025-11-20T17:03:18"]
     noradID = 39084
     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
-    solarAngles = np.array([33.78604596, 157.84150300])
-    target = np.array([30.30633, -97.86138])
-    imCorner = np.array([[31.35728, -99.04942],[31.33577, -96.64984],[29.23667, -96.69938],[29.25645, -99.04837]])
+    solarAngles = np.array([36.78359000, 158.15761834])
+    target = np.array([30.30615, -97.86711])
+    imCorner = np.array([[31.35457, -99.05572],[31.33318, -96.65620],[29.23677, -96.70554],[29.25645, -99.05455]])
 
-    data = SpaceTrackAPI(username, password)
-    tles, closeTime = data.getTLEatEpoch(noradID, imTime)
+    tlePath = Path(r"D:\Users\al62352\SpaceTrackTLE\tle39084.txt")
+    tles = getTLEData(tlePath)
+    line1, line2, closeTime = tles.printTLE(imTime[0])
+    print()
 
     oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
     L8 = Satellite(name="Landsat-8",
-        orbit=TwoLineElements(tle=[tles[1],tles[2]]),instruments=[oli])
+        orbit=TwoLineElements(tle=[line1,line2]),instruments=[oli])
     times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
     results = collect_orbit_track(L8, times, sat_sunlit = True, solar_altaz = True, solar_beta = True)
     lon = results.geometry.x
@@ -133,19 +136,21 @@ def runTest4():
     print()
     username = "alec.lewandowski@utexas.edu"
     password = "!Lew3dglatutaustin"
-    imTime = ["2025-11-20T17:00:00", "2025-11-20T17:03:18"]
+    imTime = ["2025-11-04T17:00:00", "2025-11-04T17:03:18"]
     noradID = 39084
     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
-    solarAngles = np.array([36.78359000, 158.15761834])
-    target = np.array([30.30615, -97.86711])
-    imCorner = np.array([[31.35457, -99.05572],[31.33318, -96.65620],[29.23677, -96.70554],[29.25645, -99.05455]])
+    solarAngles = np.array([40.95210647, 156.88012216])
+    target = np.array([30.30640, -97.86433])
+    imCorner = np.array([[31.35728, -99.05257],[31.33582, -96.65299],[29.23672, -96.70246],[29.25645, -99.05146]])
 
-    data = SpaceTrackAPI(username, password)
-    tles, closeTime = data.getTLEatEpoch(noradID, imTime)
+    tlePath = Path(r"D:\Users\al62352\SpaceTrackTLE\tle39084.txt")
+    tles = getTLEData(tlePath)
+    line1, line2, closeTime = tles.printTLE(imTime[0])
+    print()
 
     oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
     L8 = Satellite(name="Landsat-8",
-        orbit=TwoLineElements(tle=[tles[1],tles[2]]),instruments=[oli])
+        orbit=TwoLineElements(tle=[line1,line2]),instruments=[oli])
     times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
     results = collect_orbit_track(L8, times, sat_sunlit = True, solar_altaz = True, solar_beta = True)
     lon = results.geometry.x
@@ -171,194 +176,6 @@ def runTest5():
     print()
     username = "alec.lewandowski@utexas.edu"
     password = "!Lew3dglatutaustin"
-    imTime = ["2025-11-04T17:00:00", "2025-11-04T17:03:18"]
-    noradID = 39084
-    sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
-    solarAngles = np.array([40.95210647, 156.88012216])
-    target = np.array([30.30640, -97.86433])
-    imCorner = np.array([[31.35728, -99.05257],[31.33582, -96.65299],[29.23672, -96.70246],[29.25645, -99.05146]])
-
-    data = SpaceTrackAPI(username, password)
-    tles, closeTime = data.getTLEatEpoch(noradID, imTime)
-
-    oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
-    L8 = Satellite(name="Landsat-8",
-        orbit=TwoLineElements(tle=[tles[1],tles[2]]),instruments=[oli])
-    times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
-    results = collect_orbit_track(L8, times, sat_sunlit = True, solar_altaz = True, solar_beta = True)
-    lon = results.geometry.x
-    lat = results.geometry.y
-    print()
-    print(f"Image scene comparison:")
-    print(f"    Propagated Final Lat: {lat.iloc[-1]:.6f}°  and Target Lat: {target[0]:.6f}°")
-    print(f"    Propagated Final Lon: {lon.iloc[-1]:.6f}°  and Target Lat: {target[1]:.6f}°")
-    print(f"    Scene Center Latitude Error: {abs(lat.iloc[-1] - target[0]):.6f}°")
-    print(f"    Scene Center Longitude Error: {abs(lon.iloc[-1] - target[1]):.6f}°")
-    azi = results.solar_az
-    elev = results.solar_alt
-    print(f"    Solar azimuth angle error: {abs(azi.iloc[-1] - solarAngles[1]):.6f}°")
-    print(f"    Solar azimuth angle error: {abs(elev.iloc[-1] - solarAngles[0]):.6f}°")
-    errsLat.append(abs(lat.iloc[-1] - target[0]))
-    errsLon.append(abs(lon.iloc[-1] - target[1]))
-    errsAzi.append(abs(azi.iloc[-1] - solarAngles[1]))
-    errsElev.append(abs(elev.iloc[-1] - solarAngles[0]))
-
-def runTest6():
-    print()
-    print("###################################################################################################")
-    print()
-    username = "alec.lewandowski@utexas.edu"
-    password = "!Lew3dglatutaustin"
-    imTime = ["2026-03-04T17:00:00", "2026-03-04T17:03:07"]
-    noradID = 49260
-    sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
-    solarAngles = np.array([46.29179568, 142.55036871])
-    target = np.array([30.30604, -97.88014])
-    imCorner = np.array([[31.35457, -99.06834],[31.33341, -96.66881],[29.23969, -96.71782],[29.25915, -99.06690]])
-
-    data = SpaceTrackAPI(username, password)
-    tles, closeTime = data.getTLEatEpoch(noradID, imTime)
-
-    oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
-    L8 = Satellite(name="Landsat-8",
-        orbit=TwoLineElements(tle=[tles[1],tles[2]]),instruments=[oli])
-    times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
-    results = collect_orbit_track(L8, times, sat_sunlit = True, solar_altaz = True, solar_beta = True)
-    lon = results.geometry.x
-    lat = results.geometry.y
-    print()
-    print(f"Image scene comparison:")
-    print(f"    Propagated Final Lat: {lat.iloc[-1]:.6f}°  and Target Lat: {target[0]:.6f}°")
-    print(f"    Propagated Final Lon: {lon.iloc[-1]:.6f}°  and Target Lat: {target[1]:.6f}°")
-    print(f"    Scene Center Latitude Error: {abs(lat.iloc[-1] - target[0]):.6f}°")
-    print(f"    Scene Center Longitude Error: {abs(lon.iloc[-1] - target[1]):.6f}°")
-    azi = results.solar_az
-    elev = results.solar_alt
-    print(f"    Solar azimuth angle error: {abs(azi.iloc[-1] - solarAngles[1]):.6f}°")
-    print(f"    Solar azimuth angle error: {abs(elev.iloc[-1] - solarAngles[0]):.6f}°")
-    errsLat.append(abs(lat.iloc[-1] - target[0]))
-    errsLon.append(abs(lon.iloc[-1] - target[1]))
-    errsAzi.append(abs(azi.iloc[-1] - solarAngles[1]))
-    errsElev.append(abs(elev.iloc[-1] - solarAngles[0]))
-
-def runTest7():
-    print()
-    print("###################################################################################################")
-    print()
-    username = "alec.lewandowski@utexas.edu"
-    password = "!Lew3dglatutaustin"
-    imTime = ["2026-02-16T17:00:00", "2026-02-16T17:03:10"]
-    noradID = 49260
-    sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
-    solarAngles = np.array([40.91992534, 146.05171992])
-    target = np.array([30.30611, -97.86543])
-    imCorner = np.array([[31.35457, -99.05257], [31.33318, -96.65620], [29.23948, -96.70548],[29.25916, -99.05146]])
-    data = SpaceTrackAPI(username, password)
-    tles, closeTime = data.getTLEatEpoch(noradID, imTime)
-
-    oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
-    L8 = Satellite(name="Landsat-8",
-        orbit=TwoLineElements(tle=[tles[1],tles[2]]),instruments=[oli])
-    times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
-    results = collect_orbit_track(L8, times, sat_sunlit = True, solar_altaz = True, solar_beta = True)
-    lon = results.geometry.x
-    lat = results.geometry.y
-    print()
-    print(f"Image scene comparison:")
-    print(f"    Propagated Final Lat: {lat.iloc[-1]:.6f}°  and Target Lat: {target[0]:.6f}°")
-    print(f"    Propagated Final Lon: {lon.iloc[-1]:.6f}°  and Target Lat: {target[1]:.6f}°")
-    print(f"    Scene Center Latitude Error: {abs(lat.iloc[-1] - target[0]):.6f}°")
-    print(f"    Scene Center Longitude Error: {abs(lon.iloc[-1] - target[1]):.6f}°")
-    azi = results.solar_az
-    elev = results.solar_alt
-    print(f"    Solar azimuth angle error: {abs(azi.iloc[-1] - solarAngles[1]):.6f}°")
-    print(f"    Solar azimuth angle error: {abs(elev.iloc[-1] - solarAngles[0]):.6f}°")
-    errsLat.append(abs(lat.iloc[-1] - target[0]))
-    errsLon.append(abs(lon.iloc[-1] - target[1]))
-    errsAzi.append(abs(azi.iloc[-1] - solarAngles[1]))
-    errsElev.append(abs(elev.iloc[-1] - solarAngles[0]))
-    
-def runTest8():
-    print()
-    print("###################################################################################################")
-    print()
-    username = "alec.lewandowski@utexas.edu"
-    password = "!Lew3dglatutaustin"
-    imTime = ["2026-01-31T17:00:00", "2026-01-31T17:03:14"]
-    noradID = 49260
-    sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
-    solarAngles = np.array([36.52656758, 149.33676846])
-    target = np.array([30.30645, -97.86326])
-    imCorner = np.array([[31.35457, -99.05257], [31.33312, -96.65305], [29.23942, -96.70240],[29.25916, -99.05146]])
-    data = SpaceTrackAPI(username, password)
-    tles, closeTime = data.getTLEatEpoch(noradID, imTime)
-
-    oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
-    L8 = Satellite(name="Landsat-8",
-        orbit=TwoLineElements(tle=[tles[1],tles[2]]),instruments=[oli])
-    times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
-    results = collect_orbit_track(L8, times, sat_sunlit = True, solar_altaz = True, solar_beta = True)
-    lon = results.geometry.x
-    lat = results.geometry.y
-    print()
-    print(f"Image scene comparison:")
-    print(f"    Propagated Final Lat: {lat.iloc[-1]:.6f}°  and Target Lat: {target[0]:.6f}°")
-    print(f"    Propagated Final Lon: {lon.iloc[-1]:.6f}°  and Target Lat: {target[1]:.6f}°")
-    print(f"    Scene Center Latitude Error: {abs(lat.iloc[-1] - target[0]):.6f}°")
-    print(f"    Scene Center Longitude Error: {abs(lon.iloc[-1] - target[1]):.6f}°")
-    azi = results.solar_az
-    elev = results.solar_alt
-    print(f"    Solar azimuth angle error: {abs(azi.iloc[-1] - solarAngles[1]):.6f}°")
-    print(f"    Solar azimuth angle error: {abs(elev.iloc[-1] - solarAngles[0]):.6f}°")
-    errsLat.append(abs(lat.iloc[-1] - target[0]))
-    errsLon.append(abs(lon.iloc[-1] - target[1]))
-    errsAzi.append(abs(azi.iloc[-1] - solarAngles[1]))
-    errsElev.append(abs(elev.iloc[-1] - solarAngles[0]))
-
-def runTest9():
-    print()
-    print("###################################################################################################")
-    print()
-    username = "alec.lewandowski@utexas.edu"
-    password = "!Lew3dglatutaustin"
-    imTime = ["2026-03-20T17:00:00", "2026-03-20T17:02:55"]
-    noradID = 49260
-    sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
-    solarAngles = np.array([52.10896757, 138.57938376])
-    target = np.array([30.30605, -97.86173])
-    imCorner = np.array([[31.35458, -99.04942],[31.33306, -96.64990],[29.23937, -96.69931],[29.25916, -99.04838]])    
-
-    data = SpaceTrackAPI(username, password)
-    tles, closeTime = data.getTLEatEpoch(noradID, imTime)
-
-    oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
-    L8 = Satellite(name="Landsat-8",
-        orbit=TwoLineElements(tle=[tles[1],tles[2]]),instruments=[oli])
-    times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
-    results = collect_orbit_track(L8, times, sat_sunlit = True, solar_altaz = True, solar_beta = True)
-    lon = results.geometry.x
-    lat = results.geometry.y
-    print()
-    print(f"Image scene comparison:")
-    print(f"    Propagated Final Lat: {lat.iloc[-1]:.6f}°  and Target Lat: {target[0]:.6f}°")
-    print(f"    Propagated Final Lon: {lon.iloc[-1]:.6f}°  and Target Lat: {target[1]:.6f}°")
-    print(f"    Scene Center Latitude Error: {abs(lat.iloc[-1] - target[0]):.6f}°")
-    print(f"    Scene Center Longitude Error: {abs(lon.iloc[-1] - target[1]):.6f}°")
-    azi = results.solar_az
-    elev = results.solar_alt
-    print(f"    Solar azimuth angle error: {abs(azi.iloc[-1] - solarAngles[1]):.6f}°")
-    print(f"    Solar azimuth angle error: {abs(elev.iloc[-1] - solarAngles[0]):.6f}°")
-    errsLat.append(abs(lat.iloc[-1] - target[0]))
-    errsLon.append(abs(lon.iloc[-1] - target[1]))
-    errsAzi.append(abs(azi.iloc[-1] - solarAngles[1]))
-    errsElev.append(abs(elev.iloc[-1] - solarAngles[0]))
-
-def runTest10():
-    print()
-    print("###################################################################################################")
-    print()
-    username = "alec.lewandowski@utexas.edu"
-    password = "!Lew3dglatutaustin"
     imTime = ["2025-12-30T17:00:00", "2025-12-30T17:03:24"]
     noradID = 49260
     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
@@ -366,12 +183,14 @@ def runTest10():
     target = np.array([30.30617, -97.88121])
     imCorner = np.array([[31.35457, -99.06834],[31.33346, -96.67196],[29.23974, -96.72091],[29.25915, -99.06690]])
 
-    data = SpaceTrackAPI(username, password)
-    tles, closeTime = data.getTLEatEpoch(noradID, imTime)
+    tlePath = Path(r"D:\Users\al62352\SpaceTrackTLE\tle49260.txt")
+    tles = getTLEData(tlePath)
+    line1, line2, closeTime = tles.printTLE(imTime[0])
+    print()
 
     oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
     L8 = Satellite(name="Landsat-8",
-        orbit=TwoLineElements(tle=[tles[1],tles[2]]),instruments=[oli])
+        orbit=TwoLineElements(tle=[line1,line2]),instruments=[oli])
     times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
     results = collect_orbit_track(L8, times, sat_sunlit = True, solar_altaz = True, solar_beta = True)
     lon = results.geometry.x
@@ -435,9 +254,4 @@ if __name__ == "__main__":
     runTest3()
     runTest4()
     runTest5()
-    runTest6()
-    runTest7()
-    runTest8()
-    runTest9()
-    runTest10()
     plotResults(errsLat, errsLon, errsAzi, errsElev)

@@ -27,14 +27,8 @@ def runTest():
 
     tlePath = Path(r"D:\Users\al62352\SpaceTrackTLE\tle49260.txt")
     tles = getTLEData(tlePath)
-    try:
-        line1, line2, closeTime = tles.print_tle(imTime[0])
-        print("\nOutput as string")
-        print(line1)
-        print(line2)
-        print(closeTime)
-    except ValueError as e:
-        print(e)
+    line1, line2, closeTime = tles.printTLE(imTime[0])
+    print()
 
     #                  FOV, Focal, Pixel #, GSD, Swath, Alt
     sens = np.array([np.deg2rad(15.0), 0.886, 6196, 30, 185000, 705000])
@@ -44,17 +38,34 @@ def runTest():
 
     oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
     L8 = Satellite(name="Landsat-8",
-        orbit=TwoLineElements(tle=[tles[1],tles[2]]), instruments=[oli])
+        orbit=TwoLineElements(tle=[line1,line2]), instruments=[oli])
     times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
     state84 = collect_orbit_track(L8, times, coordinates = OrbitCoordinate.WGS84, sat_sunlit = True, solar_altaz = True, solar_beta = True)
     # stateECI = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECI)
     stateECEF = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
-    state84.to_csv("state84_LS8.csv", index=False)
-    stateECEF.to_csv("stateECEF_LS8.csv", index=False)
     
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target, 5.0)
     # gridded.getOffNad2DArrayFlat(705000, 5.0, 5.0)
-    gridded.plotNadirBaseArray(705000)
+    # gridded.plotNadirBaseArray(705)
+
+    # gridded.analyze2DArrayModels(0.0, 0.0)
+
+    angVecs1 = np.array([10.0, 12.5, 15.0, 17.5, 20.0])
+    angVecs2 = np.array([0.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0])
+    # minMat, maxMat = gridded.getColorbarMinMax(angVecs)
+    # print(minMat)
+    # print(maxMat)
+
+    simpleMin = 29.78834222052943
+    sphereMin = 29.788342227426124
+    simpleMax = 37.860686691020085
+    sphereMax = 39.720874420117006
+
+    for i in range(len(angVecs)):
+        for k in range(len(angVecs)):
+            gridded.getOffNad2DArraySpherical(705000, angVecs[i], angVecs[k], simpleMin, sphereMax)
+
+    print()
 
 
 if __name__ == "__main__":

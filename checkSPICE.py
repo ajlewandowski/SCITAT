@@ -3,10 +3,7 @@ This file will be a test case to ensure the NASA SPICE (SpiceyPy) package is wor
 
 If this script runs completely, and no errors occur with correct outputs, you are good to go!
 """
-
-import os
 import sys
-import urllib.request
 from pathlib import Path
 import spiceypy as spice
 
