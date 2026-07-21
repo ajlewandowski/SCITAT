@@ -26,12 +26,13 @@ def runTest():
     noradID = 49260
 
     tlePath = Path(r"D:\Users\al62352\SpaceTrackTLE\tle49260.txt")
-    tles = getTLEData("tle49260.txt", tlePath)
+    tles = getTLEData(tlePath)
     try:
         line1, line2, closeTime = tles.printTLE(imTime[0], noradID)
         print("\nOutput as string")
         print(line1)
         print(line2)
+        print(closeTime)
     except ValueError as e:
         print(e)
 
