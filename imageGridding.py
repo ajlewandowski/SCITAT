@@ -409,15 +409,28 @@ class imageGridding:
         if plotSave:
             # Plot GSD over array 
             fig, ax = plt.subplots(figsize=(8, 5))
-            ax.plot(np.rad2deg(angVecFlat), abs(arcs - GSDsNow)*100 / GSDsNow, linewidth=2, color='r')
+            ax.plot(np.rad2deg(angVecFlat), arcs, linewidth=2, color='r', label='Spherical')
+            ax.plot(np.rad2deg(angVecFlat), GSDsNow, linewidth=2, color='b', label='Simple')
             ax.set_xlabel('FOV Span (degrees)')
-            ax.set_ylabel('GSD Difference (m)')
-            ax.set_title(f'Pixel-by-Pixel % Difference of Base GSD Landsat-8 OLI (Nadir) at Altitude: {altitude} km')
+            ax.set_ylabel('GSD (m)')
+            ax.set_title(f'Single Line Array Pixel-by-Pixel GSD Landsat-8 OLI (Nadir) at Altitude: {altitude} km')
             ax.grid(True, alpha=0.3)
+            ax.legend()
             plt.savefig(f'fov_skew_array_base_{altitude}.png')
             print(f"Plot saved as fov_skew_array_base_{altitude}.png")
 
-        return abs(arcs - GSDsNow)*100 / GSDsNow, np.rad2deg(angVecFlat)
+
+            # Plot GSD over array 
+            fig, ax = plt.subplots(figsize=(8, 5))
+            ax.plot(np.rad2deg(angVecFlat), abs(arcs - GSDsNow)*100 / arcs, linewidth=2, color='r')
+            ax.set_xlabel('FOV Span (degrees)')
+            ax.set_ylabel('Percent Error in GSD (m)')
+            ax.set_title(f'Pixel-by-Pixel % Difference of Base GSD Landsat-8 OLI (Nadir) at Altitude: {altitude} km')
+            ax.grid(True, alpha=0.3)
+            plt.savefig(f'fov_skew_array_base_percerror_{altitude}.png')
+            print(f"Plot saved as fov_skew_array_base_percerror_{altitude}.png")
+
+        return abs(arcs - GSDsNow)*100 / arcs, np.rad2deg(angVecFlat)
 
     def plotAltitudeTimeseries(self):
         # This function plots the altitude time-series 

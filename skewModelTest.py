@@ -1,5 +1,5 @@
 """
-Gridding and resolution heat map test file
+This file tests the flat-earth assumption versus the spherical earth assumption
 """
 
 import numpy as np
@@ -44,6 +44,7 @@ def runTest():
 
     sens = np.array([np.deg2rad(90.0), 0.886, 6*6196, 30, 185000, 705000])
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target)
+
     altVec = np.linspace(300, 10000, 5000)
     percentLimit = 1.0
     degVals = np.zeros(len(altVec))
