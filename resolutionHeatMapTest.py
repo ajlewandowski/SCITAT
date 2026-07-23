@@ -4,6 +4,7 @@ Gridding and resolution heat map test file
 
 import numpy as np
 from pathlib import Path
+import matplotlib.pyplot as plt
 from imageGridding import imageGridding
 from tatc import utils
 from tatc.schemas import Instrument, Satellite, TwoLineElements
@@ -44,26 +45,44 @@ def runTest():
     # stateECI = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECI)
     stateECEF = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
     
-    gridded = imageGridding("49260", state84, stateECEF, times, sens, target, 5.0)
+    # gridded = imageGridding("49260", state84, stateECEF, times, sens, target, 5.0)
     # gridded.getOffNad2DArrayFlat(705000, 5.0, 5.0)
     # gridded.plotNadirBaseArray(705)
 
     # gridded.analyze2DArrayModels(0.0, 0.0)
 
-    angVecs1 = np.array([10.0, 12.5, 15.0, 17.5, 20.0])
-    angVecs2 = np.array([0.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0])
+    angVecs = np.array([0.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0])
     # minMat, maxMat = gridded.getColorbarMinMax(angVecs)
     # print(minMat)
     # print(maxMat)
 
     simpleMin = 29.78834222052943
-    sphereMin = 29.788342227426124
-    simpleMax = 37.860686691020085
+    # sphereMin = 29.788342227426124
+    # simpleMax = 37.860686691020085
     sphereMax = 39.720874420117006
 
-    for i in range(len(angVecs)):
-        for k in range(len(angVecs)):
-            gridded.getOffNad2DArraySpherical(705000, angVecs[i], angVecs[k], simpleMin, sphereMax)
+    # for i in range(len(angVecs)):
+    #     for k in range(len(angVecs)):
+    #         gridded.getOffNad2DArraySpherical(705000, angVecs[i], angVecs[k], simpleMin, sphereMax)
+
+    # for i in range(len(angVecs)):
+    #     for k in range(len(angVecs)):
+    #         fileName = f'fov_skew_2Darray_matrix_offnadir_({angVecs[i]},{angVecs[k]}).npy'
+    #         pathNowSimple = Path("D:/Users/al62352/SimpleHeatmap")
+    #         fullPathSimple = pathNowSimple / fileName
+    #         dataSimple = np.load(fullPathSimple)
+
+    #         fileName = f'fov_skew_2Darray_spherical_matrix_offnadir_({angVecs[i]},{angVecs[k]}).npy'
+    #         pathNowSpherical = Path("D:/Users/al62352/SphericalHeatmap")
+    #         fullPathSpherical = pathNowSpherical / fileName
+    #         dataSpherical = np.load(fullPathSpherical)
+
+    #         dataDiff = dataSpherical - dataSimple
+
+    #         matFileName = f'fov_skew_2Darray_diff_matrix_offnadir_({angVecs[i]},{angVecs[k]}).npy'
+    #         fullMatPath = Path("D:/Users/al62352/HeatmapDiffs") / matFileName
+    #         np.save(fullMatPath, dataDiff)
+
 
     print()
 

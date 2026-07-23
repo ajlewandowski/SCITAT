@@ -10,13 +10,12 @@ import matplotlib.pyplot as plt
 # This class will import system parameters and produce a resolution "heat map"
 
 class imageGridding:
-    def __init__(self, noradID, state84, stateECEF, times, sens, target, offNadAngle):
+    def __init__(self, noradID, state84, stateECEF, times, sens, target):
         self.norad = noradID
         self.state84 = state84
         self.stateECEF = stateECEF
         self.sens = sens
         self.target = target
-        self.offNad = offNadAngle
         self.times = times
 
         self.wgsSMA = 6378137.0
@@ -378,10 +377,13 @@ class imageGridding:
 
         return northLVLH
 
-    def plotNadirBaseArray(self, alt):
+    def plotNadirBaseArray(self, altitude, plotSave):
         # This function plots a single line-integration imager array to look at a single dispersion over the sensor
 
+        alt = altitude*1e3
+
         IFOVbase = self.sens[0] / self.sens[2]
+        GSDbase = IFOVbase * alt
         angVecFlat = np.linspace(-self.sens[0]/2, self.sens[0]/2, int(self.sens[2]))
 
         GSDsNow = np.zeros(len(angVecFlat))
@@ -404,17 +406,18 @@ class imageGridding:
             s = self.ae * dLam
             arcs[j] = s
 
-        # Plot GSD over array 
-        fig, ax = plt.subplots(figsize=(8, 5))
-        # ax.plot(np.rad2deg(angVecFlat), GSDsNow*1e3, linewidth=2, color='r')
-        # ax.plot(np.rad2deg(angVecFlat), arcs*1e3, linewidth=2, color='b')
-        ax.plot(np.deg2rad(angVecFlat), (GSDsNow - arcs)*1e3, linewidth=2, color='r')
-        ax.set_xlabel('FOV Span (degrees)')
-        ax.set_ylabel('GSD (m)')
-        ax.set_title(f'Pixel-by-Pixel GSD of Landsat-8 OLI (Nadir) at Altitude: {alt} km')
-        ax.grid(True, alpha=0.3)
-        plt.savefig('fov_skew_array_base.png')
-        print("Plot saved as fov_skew_array_base.png")
+        if plotSave:
+            # Plot GSD over array 
+            fig, ax = plt.subplots(figsize=(8, 5))
+            ax.plot(np.rad2deg(angVecFlat), abs(arcs - GSDsNow)*100 / GSDsNow, linewidth=2, color='r')
+            ax.set_xlabel('FOV Span (degrees)')
+            ax.set_ylabel('GSD Difference (m)')
+            ax.set_title(f'Pixel-by-Pixel % Difference of Base GSD Landsat-8 OLI (Nadir) at Altitude: {altitude} km')
+            ax.grid(True, alpha=0.3)
+            plt.savefig(f'fov_skew_array_base_{altitude}.png')
+            print(f"Plot saved as fov_skew_array_base_{altitude}.png")
+
+        return abs(arcs - GSDsNow)*100 / GSDsNow, np.rad2deg(angVecFlat)
 
     def plotAltitudeTimeseries(self):
         # This function plots the altitude time-series 
