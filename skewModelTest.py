@@ -31,10 +31,10 @@ def runTest():
     print()
 
     #                  FOV, Focal, Pixel #, GSD, Swath, Alt
-    sens = np.array([np.deg2rad(15.0), 0.886, 6196, 30, 185000, 705000])
+    sens = np.array([np.deg2rad(15.0), 0.886, 6196, 30, 185, 705])
     target = np.array([30.30617, -97.88121])
 
-    oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
+    oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(sens[5]*1e3, sens[4]*1e3),req_target_sunlit=True)
     L8 = Satellite(name="Landsat-8",
         orbit=TwoLineElements(tle=[line1,line2]), instruments=[oli])
     times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
@@ -42,7 +42,7 @@ def runTest():
     stateECEF = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
     angVecs = np.array([0.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0])
 
-    sens = np.array([np.deg2rad(90.0), 0.886, 6*6196, 30, 185000, 705000])
+    sens = np.array([np.deg2rad(90.0), 0.886, 6*6196, 30, 185, 705])
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target)
 
     altVec = np.linspace(300, 10000, 5000)

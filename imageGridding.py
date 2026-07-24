@@ -17,22 +17,36 @@ class imageGridding:
         self.sens = sens
         self.target = target
         self.times = times
+        self.IFOVbase = sens[0] / sens[2]
 
         self.wgsSMA = 6378137.0
         self.wgsf = 1 / 298.257223563
         self.ae = 6378137
 
-    def getOffNad2DArrayFlat(self, altitude, fore, starboard, matMin, matMax):
+    def getGSDArray(self, altitude, fore, starboard, matMin, matMax, saveMat, saveFig, path):
+        """ This function will analyze the satellite's altitude and determine whether to use flat-earth (quicker) or spherical earth (slower) model """
+        """ Data was taken in skewModelTest.py and the following fit was determined to correlate altitude to the maximum off-nadir angle the field of view can subtend, 
+            before the flat model becomes inaccurate (1% threshold). y = a * x^b      a = 563.0276124576732      b = -0.5638225633766288    RSquared = 0.9941159055261909"""
+        degLimitFlat = 563.0276124576732 * np.power(altitude, -0.5638225633766288)
+        fovHalf = np.rad2deg(self.sens[0]/2)
+        checkVal = np.max(abs(np.array([fore + fovHalf, fore - fovHalf, starboard + fovHalf, starboard - fovHalf])))
+
+        print()
+        if checkVal >= degLimitFlat:
+            fig = self.getOffNad2DArraySpherical(altitude, fore, starboard, matMin, matMax, saveMat, saveFig, path)
+        else:
+            fig = self.getOffNad2DArrayFlat(altitude, fore, starboard, matMin, matMax, saveMat, saveFig, path)
+        print()
+        return fig
+
+    def getOffNad2DArrayFlat(self, altitude, fore, starboard, matMin, matMax, saveMat, saveFig, path):
         # This function looks at altitude, satellite look angles, and sensor parameters to create 2D arrays of
         # a satellite image's GSD. Assuming the Earth's surface is flat, this will break down the greater
         # the look angle. Takes shorter time to run compared to spherical Earth model.
 
         # Fore is forward/backward angle - fore is the positive and aft negative
         # Starboard is right/left angle - starboard is the positive to the right, port negative to the left
-
-        # Calculate the instantaneous field-of-view (IFOV), which is FOV / # of Pix
-        IFOVbase = self.sens[0] / self.sens[2]
-        alt = altitude
+        alt = altitude*1e3
 
         # Creating a series of satellite look angles 
         angFore = np.deg2rad(fore)
@@ -47,15 +61,15 @@ class imageGridding:
         # Iterate through the satellite look angles creating the GSD arrays
         for k in range(len(angVecFore) - 1):
             # Get the range vector assuming a flat earth model
-            rangeVec = alt / np.cos(angVecFore[k] + IFOVbase*0.5)
+            rangeVec = alt / np.cos(angVecFore[k] + self.IFOVbase*0.5)
             # Get the base GSD from the range vector and IFOV
-            GSDbase = IFOVbase * rangeVec
+            GSDbase = self.IFOVbase * rangeVec
             # Skew the IFOV based on the angle between the range and ground
-            GSDsFore[k] = GSDbase / np.cos(angVecFore[k] + IFOVbase*0.5)
+            GSDsFore[k] = GSDbase / np.cos(angVecFore[k] + self.IFOVbase*0.5)
 
-            rangeVec = alt / np.cos(angVecStar[k] + IFOVbase*0.5)
-            GSDbase = IFOVbase * rangeVec
-            GSDsStar[k] = GSDbase / np.cos(angVecStar[k] + IFOVbase*0.5)
+            rangeVec = alt / np.cos(angVecStar[k] + self.IFOVbase*0.5)
+            GSDbase = self.IFOVbase * rangeVec
+            GSDsStar[k] = GSDbase / np.cos(angVecStar[k] + self.IFOVbase*0.5)
 
         # Creating the 2D array with the skewed multi-directional angles
         GSDs = np.zeros((len(GSDsFore), len(GSDsStar)))
@@ -72,7 +86,10 @@ class imageGridding:
 
         # Plot GSD over array 
         fig, ax = plt.subplots(figsize=(10, 8))
-        im = ax.imshow(GSDs, vmin = matMin, vmax = matMax, origin='lower', cmap='coolwarm', interpolation='nearest')
+        if matMin > 0 and matMax > 0:
+            im = ax.imshow(GSDs, vmin = matMin, vmax = matMax, origin='lower', cmap='coolwarm', interpolation='nearest')
+        else:
+            im = ax.imshow(GSDs, origin='lower', cmap='coolwarm', interpolation='nearest')
         cbar = fig.colorbar(im)
         cbar.set_label('Ground Sampling Distance (m)')
         stepRow = (nRow - 1) / (len(selectIndRow) - 1)
@@ -85,19 +102,24 @@ class imageGridding:
         ax.set_ylabel('Fore/Aft Direction (°)')
         ax.set_title(f'Pixel-by-Pixel GSD Off-Nadir ({fore}°,{starboard}°)')
 
-        # Save the graphic and data file
-        fileName = f'fov_skew_2Darray_offnadir_({fore},{starboard}).png'
-        pathNow = Path("D:/Users/al62352/SimpleHeatmap")
-        fullPath = pathNow / fileName
+        print(f'GSD Array for ({fore}°,{starboard}°) utilized the Flat-Earth Approximation')
 
-        plt.savefig(fullPath)
-        print(f"Plot saved as fov_skew_2Darray_offnadir_({fore},{starboard}).png")
+        if saveFig:
+            # Save the graphic and data file
+            fileName = f'GSDarray_{altitude}_km_offnadir_({fore},{starboard})_flat.png'
+            fullPath = path / fileName
+            plt.savefig(fullPath)
+            print(f"Plot saved as GSDarray_{altitude}_km_offnadir_({fore},{starboard})_flat.png")
 
-        # matFileName = f'fov_skew_2Darray_matrix_offnadir_({fore},{starboard}).npy'
-        # fullMatPath = self.path / matFileName
-        # np.save(fullMatPath, GSDs)
+        if saveMat:
+            matFileName = f'GSDarray_matrix_{altitude}_km_offnadir_({fore},{starboard})_flat.npy'
+            fullMatPath = path / matFileName
+            np.save(fullMatPath, GSDs)
+            print(f"Array saved as GSDarray_matrix_{altitude}_km_offnadir_({fore},{starboard})_flat.npy")
 
-    def getOffNad2DArraySpherical(self, altitude, fore, starboard, matMin, matMax):
+        return fig
+
+    def getOffNad2DArraySpherical(self, altitude, fore, starboard, matMin, matMax, saveMat, saveFig, path):
         # This function looks at altitude, satellite look angles, and sensor parameters to create 2D arrays of
         # a satellite image's GSD. Assuming the Earth's surface is spherical, takes longer to run.
 
@@ -105,8 +127,7 @@ class imageGridding:
         # Starboard is right/left angle - starboard is the positive to the right, port negative to the left
 
         # Calculate the instantaneous field-of-view (IFOV), which is FOV / # of Pix
-        IFOVbase = self.sens[0] / self.sens[2]
-        alt = altitude
+        alt = altitude*1e3
 
         # Creating a series of off-nadir angles for Landsat-8 (15 deg fov)
         angFore = np.deg2rad(fore)
@@ -121,7 +142,7 @@ class imageGridding:
         for k in range(len(angVecFore)):
             lamFore[k] = self.getEarthCentralAngle(altitude, angVecFore[k])
             lamStar[k] = self.getEarthCentralAngle(altitude, angVecStar[k])
-            # rho = (altitude + ae*(1 - np.cos(lam))) / np.cos(angVecFore[k] + IFOVbase*0.5)
+            # rho = (altitude + ae*(1 - np.cos(lam))) / np.cos(angVecFore[k] + self.IFOVbase*0.5)
             # print(rho)
         # maximum look angle - sin(eta) = ae / (altitude + ae)
 
@@ -144,7 +165,10 @@ class imageGridding:
 
         # Plot GSD over array 
         fig, ax = plt.subplots(figsize=(10, 8))
-        im = ax.imshow(arcs, vmin = matMin, vmax = matMax, origin='lower', cmap='coolwarm', interpolation='nearest')
+        if matMin > 0 and matMax > 0:
+            im = ax.imshow(arcs, vmin = matMin, vmax = matMax, origin='lower', cmap='coolwarm', interpolation='nearest')
+        else:
+            im = ax.imshow(arcs, origin='lower', cmap='coolwarm', interpolation='nearest')
         cbar = fig.colorbar(im)
         cbar.set_label('Ground Sampling Distance (m)')
         stepRow = (nRow - 1) / (len(selectIndRow) - 1)
@@ -156,19 +180,24 @@ class imageGridding:
         ax.set_xlabel('Starboard/Port Direction (°)')
         ax.set_ylabel('Fore/Aft Direction (°)')
         ax.set_title(f'Pixel-by-Pixel GSD Off-Nadir ({fore}°,{starboard}°)')
+
+        print(f'GSD Array for ({fore}°,{starboard}°) utilized the Spherical-Earth Approximation')
+
         
-        # Save the graphic and data file
-        fileName = f'fov_skew_2Darray_spherical_offnadir_({fore},{starboard}).png'
-        pathNow = Path("D:/Users/al62352/SphericalHeatmap")
-        fullPath = pathNow / fileName
+        if saveFig:
+            # Save the graphic and data file
+            fileName = f'GSDarray_{altitude}_km_offnadir_({fore},{starboard})_spherical.png'
+            fullPath = path / fileName
+            plt.savefig(fullPath)
+            print(f"Plot saved as GSDarray_{altitude}_km_offnadir_({fore},{starboard})_spherical.png")
 
-        plt.savefig(fullPath)
-        print(f"Plot saved as fov_skew_2Darray_spherical_offnadir_({fore},{starboard}).png")
+        if saveMat:
+            matFileName = f'GSDarray_matrix_{altitude}_km_offnadir_({fore},{starboard})_spherical.npy'
+            fullMatPath = path / matFileName
+            np.save(fullMatPath, arcs)
+            print(f"Array saved as GSDarray_matrix_{altitude}_km_offnadir_({fore},{starboard})_spherical.npy")
 
-        # matFileName = f'fov_skew_2Darray_spherical_matrix_offnadir_({fore},{starboard}).npy'
-        # fullMatPath = self.path / matFileName
-        # np.save(fullMatPath, arcs)
-        # print(f"Array saved as fov_skew_2Darray_spherical_matrix_offnadir_({fore},{starboard}).npy")
+        return fig
 
     def getEarthCentralAngle(self, altitude, offNadAngle):
 
@@ -178,7 +207,6 @@ class imageGridding:
     def getOffNadOLIArrayFlat(self, angle):
 
         # Find the IFOV and define the altitude time-series from the state output from the WGS84 TAT-C model
-        IFOVbase = self.sens[0] / self.sens[2]
         alts84 = self.state84['geometry'].apply(lambda p: p.z).values
         time84 = pd.Series(self.times)
 
@@ -189,10 +217,10 @@ class imageGridding:
         # Creating an array of GSDs based of the altitude time-series assuming a flat earth model
         GSDsNow = np.zeros((len(alts84), len(angVec) - 1))
         for k in range(len(alts84)):
-            rangeVec = alts84[k] / np.cos(angVec[:-1] + 0.5*IFOVbase)
-            GSDbase = IFOVbase * rangeVec
+            rangeVec = alts84[k] / np.cos(angVec[:-1] + 0.5*self.IFOVbase)
+            GSDbase = self.IFOVbase * rangeVec
             for j in range(len(angVec) - 1):
-                GSDsNow[k,j] = GSDbase[j] / np.cos(angVec[j] + 0.5*IFOVbase)
+                GSDsNow[k,j] = GSDbase[j] / np.cos(angVec[j] + 0.5*self.IFOVbase)
 
         # Indexing the first, quarter, half, three-quarter, and end for graphic labeling purposes
         nRow = GSDsNow.shape[0]
@@ -382,14 +410,13 @@ class imageGridding:
 
         alt = altitude*1e3
 
-        IFOVbase = self.sens[0] / self.sens[2]
-        GSDbase = IFOVbase * alt
+        GSDbase = self.IFOVbase * alt
         angVecFlat = np.linspace(-self.sens[0]/2, self.sens[0]/2, int(self.sens[2]))
 
         GSDsNow = np.zeros(len(angVecFlat))
         for k in range(len(angVecFlat)):
             rangeSat = alt / np.cos(angVecFlat[k])
-            GSDSat = IFOVbase * rangeSat
+            GSDSat = self.IFOVbase * rangeSat
             GSDsNow[k] = GSDSat / np.cos(angVecFlat[k])
 
         angVecSphere = np.linspace(-self.sens[0]/2, self.sens[0]/2, int(self.sens[2]) + 1)
@@ -494,17 +521,25 @@ class imageGridding:
         plt.savefig(f'difference_skew_array_({fore},{star}).png')
         print(f'Plot saved as difference_skew_array_({fore},{star}).png')
 
-    def getColorbarMinMax(self, angVec):
+    def getColorbarMinMax(self, angVec, altitude):
 
-        mats = []
-        for i in range(len(angVec)):
-            for j in range(len(angVec)):
-                matPath = Path(f"D:/Users/al62352/SphericalHeatmap/fov_skew_2Darray_spherical_matrix_offnadir_({angVec[i]},{angVec[j]}).npy")
-                matData = np.load(matPath)
-                mats.append(matData)
+        alt = altitude * 1e3
 
-        matMin = min(np.nanmin(m) for m in mats)
-        matMax = max(np.nanmax(m) for m in mats)
+        minAng = np.deg2rad(min(angVec))
+        maxAng = np.deg2rad(max(angVec))
 
-        return matMin, matMax
+        rangeVec = alt / np.cos(minAng + self.IFOVbase*0.5)
+        GSDbase = self.IFOVbase * rangeVec
+        GSDsFore = GSDbase / np.cos(minAng + self.IFOVbase*0.5)
+        rangeVec = alt / np.cos(minAng + self.IFOVbase*0.5)
+        GSDbase = self.IFOVbase * rangeVec
+        GSDsStar = GSDbase / np.cos(minAng + self.IFOVbase*0.5)
+        minGSD = np.sqrt(GSDsFore * GSDsStar)
 
+        lam2 = self.getEarthCentralAngle(alt, maxAng + self.sens[0]/2)
+        lam1 = self.getEarthCentralAngle(alt, maxAng + self.sens[0]/2 - self.IFOVbase)
+        dLam = abs(lam2 - lam1)
+        A = abs(4 * self.ae**2 * np.arcsin(np.sin(dLam/2)*np.sin(dLam/2)))
+        maxGSD = np.sqrt(A)
+      
+        return minGSD, maxGSD
