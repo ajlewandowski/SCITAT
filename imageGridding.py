@@ -36,7 +36,6 @@ class imageGridding:
             fig = self.getOffNad2DArraySpherical(altitude, fore, starboard, matMin, matMax, saveMat, saveFig, path)
         else:
             fig = self.getOffNad2DArrayFlat(altitude, fore, starboard, matMin, matMax, saveMat, saveFig, path)
-        print()
         return fig
 
     def getOffNad2DArrayFlat(self, altitude, fore, starboard, matMin, matMax, saveMat, saveFig, path):

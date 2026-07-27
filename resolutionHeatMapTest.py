@@ -42,16 +42,17 @@ def runTest():
     stateECEF = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
 
     startAng = 0.0
-    stepAng = 2.5
-    stopAng = 5.0 + stepAng
+    stepAng = 1.0
+    stopAng = 20.0
     altitude = 705
 
     print(f"Producing Ground Sampling Distance (GSD) Heatmaps from {startAng}° to {stopAng}° in steps of {stepAng}°.")
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target)
-    angVecs = np.arange(startAng, stopAng, stepAng)
+    angVecs = np.arange(startAng, stopAng + stepAng, stepAng)
     minGSD, maxGSD = gridded.getColorbarMinMax(angVecs, altitude)
 
-    print(angVecs)
+    print(minGSD)
+    print(maxGSD)
 
     pathHeatmap = Path("D:/Users/al62352/ResolutionHeatmaps")
 
