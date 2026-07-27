@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # This class will import system parameters and produce a resolution "heat map"
 
@@ -107,13 +108,13 @@ class imageGridding:
             # Save the graphic and data file
             fileName = f'GSDarray_{altitude}_km_offnadir_({fore},{starboard})_flat.png'
             fullPath = path / fileName
-            plt.savefig(fullPath)
+            plt.imsave(fullPath, GSDs, cmap='coolwarm')
             print(f"Plot saved as GSDarray_{altitude}_km_offnadir_({fore},{starboard})_flat.png")
 
         if saveMat:
             matFileName = f'GSDarray_matrix_{altitude}_km_offnadir_({fore},{starboard})_flat.npy'
             fullMatPath = path / matFileName
-            np.save(fullMatPath, GSDs)
+            np.savez_compressed(fullMatPath, GSDs=GSDs)
             print(f"Array saved as GSDarray_matrix_{altitude}_km_offnadir_({fore},{starboard})_flat.npy")
 
         return fig
@@ -187,13 +188,13 @@ class imageGridding:
             # Save the graphic and data file
             fileName = f'GSDarray_{altitude}_km_offnadir_({fore},{starboard})_spherical.png'
             fullPath = path / fileName
-            plt.savefig(fullPath)
+            plt.imsave(fullPath, arcs, cmap='coolwarm')
             print(f"Plot saved as GSDarray_{altitude}_km_offnadir_({fore},{starboard})_spherical.png")
 
         if saveMat:
             matFileName = f'GSDarray_matrix_{altitude}_km_offnadir_({fore},{starboard})_spherical.npy'
             fullMatPath = path / matFileName
-            np.save(fullMatPath, arcs)
+            np.savez_compressed(fullMatPath, arcs=arcs)
             print(f"Array saved as GSDarray_matrix_{altitude}_km_offnadir_({fore},{starboard})_spherical.npy")
 
         return fig
