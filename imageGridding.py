@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # This class will import system parameters and produce a resolution "heat map"
 
@@ -108,7 +107,7 @@ class imageGridding:
             # Save the graphic and data file
             fileName = f'GSDarray_{altitude}_km_offnadir_({fore},{starboard})_flat.png'
             fullPath = path / fileName
-            plt.imsave(fullPath, GSDs, cmap='coolwarm')
+            plt.savefig(fullPath)
             print(f"Plot saved as GSDarray_{altitude}_km_offnadir_({fore},{starboard})_flat.png")
 
         if saveMat:
@@ -155,7 +154,7 @@ class imageGridding:
                 dLamStar = lamStar[k+1] - lamStar[k]
                 # Using the solid angle patch formulas to get surface area, then get geometric mean for a pseudo-GSD
                 A = abs(4 * self.ae**2 * np.arcsin(np.sin(dLamFore/2)*np.sin(dLamStar/2)))
-                arcs[j,k] = np.sqrt(A)
+                arcs[j,k] = np.sqrt(A) * 1e3
 
         # Indexing the first, quarter, half, three-quarter, and end points for labeling graphic
         nRow = arcs.shape[0]
@@ -188,7 +187,7 @@ class imageGridding:
             # Save the graphic and data file
             fileName = f'GSDarray_{altitude}_km_offnadir_({fore},{starboard})_spherical.png'
             fullPath = path / fileName
-            plt.imsave(fullPath, arcs, cmap='coolwarm')
+            plt.savefig(fullPath)
             print(f"Plot saved as GSDarray_{altitude}_km_offnadir_({fore},{starboard})_spherical.png")
 
         if saveMat:

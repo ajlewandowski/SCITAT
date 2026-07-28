@@ -51,14 +51,11 @@ def runTest():
     angVecs = np.arange(startAng, stopAng + stepAng, stepAng)
     minGSD, maxGSD = gridded.getColorbarMinMax(angVecs, altitude)
 
-    print(minGSD)
-    print(maxGSD)
-
     pathHeatmap = Path("D:/Users/al62352/ResolutionHeatmaps")
 
-    for i in range(len(angVecs)):
+    for i in range(len(angVecs)-10):
         for k in range(len(angVecs)):
-            _ = gridded.getGSDArray(altitude, angVecs[i], angVecs[k], minGSD, maxGSD, saveMat=True, saveFig=True, path=pathHeatmap)
+            _ = gridded.getGSDArray(altitude, angVecs[i+10], angVecs[k], minGSD, maxGSD, saveMat=True, saveFig=True, path=pathHeatmap)
 
     print()
 
