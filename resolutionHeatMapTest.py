@@ -35,15 +35,15 @@ def runTest():
     target = np.array([30.30617, -97.88121])
     
     oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
-    L8 = Satellite(name="Landsat-8",
+    L9 = Satellite(name="Landsat-9",
         orbit=TwoLineElements(tle=[line1,line2]), instruments=[oli])
     times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
-    state84 = collect_orbit_track(L8, times, coordinates = OrbitCoordinate.WGS84, sat_sunlit = True, solar_altaz = True, solar_beta = True)
-    stateECEF = collect_orbit_track(L8, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
+    state84 = collect_orbit_track(L9, times, coordinates = OrbitCoordinate.WGS84, sat_sunlit = True, solar_altaz = True, solar_beta = True)
+    stateECEF = collect_orbit_track(L9, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
 
     startAng = 0.0
     stepAng = 1.0
-    stopAng = 20.0
+    stopAng = 25.0
     altitude = 705
 
     print(f"Producing Ground Sampling Distance (GSD) Heatmaps from {startAng}° to {stopAng}° in steps of {stepAng}°.")
@@ -51,13 +51,16 @@ def runTest():
     angVecs = np.arange(startAng, stopAng + stepAng, stepAng)
     minGSD, maxGSD = gridded.getColorbarMinMax(angVecs, altitude)
 
-    pathHeatmap = Path("D:/Users/al62352/ResolutionHeatmaps")
+    pathHeatmap = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km")
 
-    for i in range(len(angVecs)-10):
+    testVecs = np.array([6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0])
+
+    for j in range(len(testVecs)):
         for k in range(len(angVecs)):
-            _ = gridded.getGSDArray(altitude, angVecs[i+10], angVecs[k], minGSD, maxGSD, saveMat=True, saveFig=True, path=pathHeatmap)
+            _ = gridded.getGSDArray(altitude, testVecs[j], angVecs[k], minGSD, maxGSD, saveMat=True, saveFig=True, path=pathHeatmap)
 
     print()
+
 
 
 if __name__ == "__main__":
