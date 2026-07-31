@@ -46,18 +46,16 @@ def runTest():
     stopAng = 25.0
     altitude = 705
 
-    print(f"Producing Ground Sampling Distance (GSD) Heatmaps from {startAng}° to {stopAng}° in steps of {stepAng}°.")
+    # print(f"Producing Ground Sampling Distance (GSD) Heatmaps from {startAng}° to {stopAng}° in steps of {stepAng}°.")
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target)
     angVecs = np.arange(startAng, stopAng + stepAng, stepAng)
     minGSD, maxGSD = gridded.getColorbarMinMax(angVecs, altitude)
 
     pathHeatmap = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km")
 
-    testVecs = np.array([6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0])
-
-    for j in range(len(testVecs)):
-        for k in range(len(angVecs)):
-            _ = gridded.getGSDArray(altitude, testVecs[j], angVecs[k], minGSD, maxGSD, saveMat=True, saveFig=True, path=pathHeatmap)
+    _ = gridded.getGSDArray(altitude, -25.0, -25.0, minGSD, maxGSD, True, True, pathHeatmap)
+    _ = gridded.getGSDArray(altitude, -25.0, 25.0, minGSD, maxGSD, True, True, pathHeatmap)
+    _ = gridded.getGSDArray(altitude, 25.0, -25.0, minGSD, maxGSD, True, True, pathHeatmap)
 
     print()
 

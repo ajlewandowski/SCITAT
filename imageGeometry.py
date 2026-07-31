@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
+from scipy.ndimage import label, maximum_filter
+
 
 # This class will import system parameters and produce a resolution "heat map"
 
@@ -29,7 +31,7 @@ class imageGeometry:
         self.targetBHCanopy = 0.25
         self.targetBH = 1.0
         self.targetOverlap = 75.0
-        self.pixGSDlimFactor = 1.25
+        self.pixGSDlimFactor = 0.25
 
     def getCostFunction(self, im1, im2):
 
@@ -37,11 +39,45 @@ class imageGeometry:
 
         return cost
 
-    def getOverlapPct(self, im1, im2):
+    def getOverlapPct(self, im1, im1Data, im2, im2Data):
 
-        overlapPct = 1.0
+        im1Row, im1Col = self.getImCenterCoords(im1, im1Data)
+        im2Row, im2Col = self.getImCenterCoords(im2, im2Data)
+
+        rowDiff = np.abs(im1Row - im2Row)
+        colDiff = np.abs(im1Col - im2Col)
+
+        overlapPix = (im1.shape[0] - rowDiff)*colDiff + rowDiff*colDiff + (im1.shape[1] - colDiff)*rowDiff
+        overlapPct = 100 - (overlapPix * 100 / (im1.shape[0]*im1.shape[1]))
 
         return overlapPct
+
+    def getImCenterCoords(self, im, imData):
+        """ The output coordinate is relative to the center of image, so where is target at optimal GSD relative to image center """
+
+        # imdata will be: fore angle sat, starboard angle sat, target location row, target location col
+        # im is the matrix
+        fore = imData[0]
+        star = imData[1]
+
+        row, col = self.getTargetPlacement(im)
+        
+        if fore > 0.0 and star > 0.0:
+            targCenRow = -(im.shape[0] // 2 - row)
+            targCenCol = -(im.shape[1] // 2 - col)
+        if fore < 0.0 and star > 0.0:
+            targCenRow = (im.shape[0] // 2 - row)
+            targCenCol = -(im.shape[1] // 2 - col)
+        if fore < 0.0 and star < 0.0:
+            targCenRow = (im.shape[0] // 2 - row)
+            targCenCol = (im.shape[1] // 2 - col)
+        if fore > 0.0 and star < 0.0:
+            targCenRow = -(im.shape[0] // 2 - row)
+            targCenCol = (im.shape[1] // 2 - col)
+        if fore == 0.0 and star == 0.0:
+            return 0, 0
+
+        return targCenRow, targCenCol
 
     def getBHRatio(self, im1, im2):
 
@@ -61,13 +97,17 @@ class imageGeometry:
 
         return errGSD
 
-    def getUsablePix(self, im1, im2):
+    def getUsablePix(self, im):
 
-        errPix = 1.0
+        gsdLim = self.pixGSDlimFactor*(self.maxGSD - self.minGSD) + self.minGSD
+
+        numPix = np.count_nonzero(im < gsdLim)
+
+        errPix = 1.0 - (numPix / (im.shape[0] * im.shape[1]))
 
         return errPix
 
-    def computeMVSCostMap(gsdMats, offNadAngles, sigmaPix, eMax):
+    def computeMVSCostMap(self, gsdMats, offNadAngles, sigmaPix, eMax):
         """
         Computes MVS cost map where unusable pixels have been set to np.nan.
         All input matrices must still be the same dimensional shape (e.g., 1000x1000).
@@ -117,3 +157,164 @@ class imageGeometry:
         costMap[invalidStereoMask] = 1.0
         
         return np.clip(costMap, 0.0, 1.0)
+
+    def getTargetPlacement(self, gsd, target_radius=0, edge_margin=40, tolerance=0.05,
+                          max_gsd=None, decimate=1, dtype=np.float64,
+                          tie_rtol=None, return_info=False):
+        """Find where in the image frame to place the target.
+    
+        Minimises the worst Ground Sampling Distance anywhere on the target
+        footprint, subject to keeping the aim point at least `edge_margin` pixels
+        from the frame boundary. The margin matters because GSD fields from an
+        oblique camera are usually monotone: the unconstrained minimum sits on the
+        near edge of the frame, which is the worst place to aim, since any pointing
+        error drops the target out of view.
+    
+        Parameters
+        ----------
+        gsd : 2D array
+            GSD in image coordinates, metres/pixel, lower is better. Non-finite and
+            non-positive entries are treated as unusable.
+        target_radius : int
+            Half-extent of the target footprint in image pixels. 0 treats the
+            target as a point.
+        edge_margin : int
+            Minimum distance from the aim point to the frame edge; should cover
+            pointing and geolocation uncertainty, not just target size. The
+            effective margin is max(edge_margin, target_radius), so the footprint
+            can never hang off the frame.
+        tolerance : float
+            Defines the near-optimal region reported in `info`: all placements
+            whose worst-case GSD is within this fraction of the best.
+        max_gsd : float, optional
+            Pixels above this are treated as unusable. Useful for cutting off
+            horizon-grazing rays that are finite but useless.
+        decimate : int
+            If >1, search every `decimate`-th pixel, then refine at full
+            resolution near the coarse answer. GSD fields are smooth, so 4-8 is
+            usually safe and much faster on large frames. Makes `info` region
+            statistics approximate.
+        return_info : bool
+            If True, also return a diagnostics dict.
+    
+        Returns
+        -------
+        (row, col), or ((row, col), info) if return_info is True.
+        """
+        g = np.asarray(gsd)
+        if g.ndim != 2:
+            raise ValueError(f"expected a 2D GSD array, got shape {g.shape}")
+        if target_radius < 0 or edge_margin < 0:
+            raise ValueError("target_radius and edge_margin must be non-negative")
+    
+        dtype = np.dtype(dtype)
+        if dtype not in (np.dtype(np.float32), np.dtype(np.float64)):
+            raise ValueError("dtype must be np.float32 or np.float64")
+    
+        r = int(target_radius)
+        m = max(int(edge_margin), r)
+        h, w = g.shape
+        if 2 * m >= min(h, w):
+            raise ValueError(f"margin {m} leaves no interior in a {h}x{w} frame")
+    
+        # Invalid pixels become +inf so that maximum_filter propagates them
+        # deterministically; NaN would not, it poisons neighbourhoods according to
+        # the filter's comparison order.
+        g = g.astype(dtype, copy=True)
+        bad = ~np.isfinite(g) | (g <= 0)
+        if max_gsd is not None:
+            bad |= g > max_gsd
+        g[bad] = np.inf
+        del bad
+    
+        rtol = 64 * np.finfo(dtype).eps if tie_rtol is None else float(tie_rtol)
+    
+        def _plateau_center(cost):
+            """Centroid of the best connected tied plateau in `cost`."""
+            idx = np.unravel_index(int(np.argmin(cost)), cost.shape)
+            best = float(cost[idx])
+            if not np.isfinite(best):
+                raise ValueError("no valid placement: every candidate pixel is invalid")
+            tie = cost <= (best * (1.0 + rtol) if best > 0 else best + rtol)
+            # Restricting to one connected component keeps the centroid from
+            # landing in the warm gap between two separate basins.
+            lab, _ = label(tie)
+            comp = lab == lab[idx]
+            ys, xs = np.nonzero(comp)
+            cy, cx = float(ys.mean()), float(xs.mean())
+            # A plateau can be non-convex or have a hole punched in it by an
+            # invalid pixel, in which case its centroid is not itself a legal
+            # placement. Snap to the nearest pixel that is.
+            iy, ix = int(round(cy)), int(round(cx))
+            if not (0 <= iy < cost.shape[0] and 0 <= ix < cost.shape[1] and comp[iy, ix]):
+                k = int(np.argmin((ys - cy) ** 2 + (xs - cx) ** 2))
+                cy, cx = float(ys[k]), float(xs[k])
+            return cy, cx, best
+    
+        d = max(1, int(decimate))
+        work = g if d == 1 else np.ascontiguousarray(g[::d, ::d])
+        rw = r if d == 1 else max(0, int(round(r / d)))
+        mw = m if d == 1 else max(int(np.ceil(m / d)), rw)
+        hw, ww = work.shape
+        if 2 * mw >= min(hw, ww):
+            raise ValueError(f"decimate={d} leaves no interior after margin")
+    
+        # Scalar `size` decomposes into two O(n) 1D passes; a disc `footprint`
+        # would be O(n*k^2) and crawl on a 38M-pixel frame.
+        worst = maximum_filter(work, size=2 * rw + 1, mode="nearest") if rw else work
+        free_r, free_c, _ = _plateau_center(worst)
+        free_r, free_c = free_r * d, free_c * d
+    
+        cost = np.full(worst.shape, np.inf, dtype=dtype)
+        keep = (slice(mw, hw - mw), slice(mw, ww - mw))
+        cost[keep] = worst[keep]
+        cbest = float(cost.min())
+        row, col, _ = _plateau_center(cost)
+        row, col = row * d, col * d
+    
+        if d > 1:
+            # Refine at full resolution around the coarse answer. The window is
+            # expanded by r before filtering so the footprint maximum is correct at
+            # the window's own edges, then cropped back.
+            pad = 2 * d
+            lo_r, hi_r = max(m, int(row) - pad), min(h - m, int(row) + pad + 1)
+            lo_c, hi_c = max(m, int(col) - pad), min(w - m, int(col) + pad + 1)
+            sr, sc = lo_r - r, lo_c - r
+            sub = g[sr:hi_r + r, sc:hi_c + r]
+            sub_worst = maximum_filter(sub, size=2 * r + 1, mode="nearest") if r else sub
+            win = sub_worst[lo_r - sr:lo_r - sr + hi_r - lo_r,
+                            lo_c - sc:lo_c - sc + hi_c - lo_c]
+            wr, wc, _ = _plateau_center(win)
+            row, col = lo_r + wr, lo_c + wc
+    
+        # Round half to even, so a plateau centred between two pixels does not
+        # drift consistently one way across repeated calls.
+        irow = min(max(int(np.round(row)), m), h - m - 1)
+        icol = min(max(int(np.round(col)), m), w - m - 1)
+        if not return_info:
+            return irow, icol
+    
+        ok = cost <= cbest * (1.0 + tolerance)
+        ys, xs = np.nonzero(ok)
+        info = {
+            "subpixel_rowcol": (row, col),
+            # Exact full-resolution footprint maximum at the chosen aim point.
+            "worst_gsd": float(g[irow - r:irow + r + 1, icol - r:icol + r + 1].max()),
+            "center_gsd": float(g[irow, icol]),
+            "edge_margin": m,
+            "target_radius": r,
+            # True if the unconstrained optimum lies outside the margin band, i.e.
+            # the margin is what set the answer rather than the GSD field. Expect
+            # this on any monotone (oblique) field.
+            "boundary_limited": not (m <= free_r <= h - m - 1
+                                    and m <= free_c <= w - m - 1),
+            "free_rowcol": (free_r, free_c),
+            # Bounding box of placements within `tolerance` of optimal. If this is
+            # large you have slack to spend on margin rather than sitting at the
+            # mathematical optimum with no robustness.
+            "region_bbox": (int(ys.min()) * d, int(ys.max()) * d,
+                            int(xs.min()) * d, int(xs.max()) * d),
+            "region_frac": float(ok.sum()) / float(np.isfinite(cost).sum()),
+            "approximate": d > 1,
+        }
+        return irow, icol, info

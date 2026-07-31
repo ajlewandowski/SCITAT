@@ -423,7 +423,7 @@ class imageGridding:
 
             # Plot GSD over array 
             fig, ax = plt.subplots(figsize=(8, 5))
-            ax.plot(np.rad2deg(angVecFlat), abs(GSDs - GSDsNow)*100 / arcs, linewidth=2, color='r')
+            ax.plot(np.rad2deg(angVecFlat), abs(GSDs - GSDsNow)*100 / GSDs, linewidth=2, color='r')
             ax.set_xlabel('FOV Span (degrees)')
             ax.set_ylabel('Percent Error in GSD (m)')
             ax.set_title(f'Pixel-by-Pixel % Difference of Base GSD Landsat-8 OLI (Nadir) at Altitude: {altitude} km')
@@ -431,7 +431,7 @@ class imageGridding:
             plt.savefig(f'fov_skew_array_base_percerror_{altitude}.png')
             print(f"Plot saved as fov_skew_array_base_percerror_{altitude}.png")
 
-        return abs(arcs - GSDsNow)*100 / arcs, np.rad2deg(angVecFlat)
+        return abs(GSDs - GSDsNow)*100 / GSDs, np.rad2deg(angVecFlat)
 
     def plotAltitudeTimeseries(self):
         # This function plots the altitude time-series 
@@ -480,3 +480,147 @@ class imageGridding:
         maxGSD = np.sqrt(A)
       
         return minGSD, maxGSD
+
+    def flipOne2Two(self, path, fore, starboard, altitude, matMin, matMax, imData):
+
+        #################### This first section will translate quadrant one to two ####################
+        angFore = np.deg2rad(fore)
+        angVecFore = np.linspace(-self.sens[0]/2 + angFore, self.sens[0]/2 + angFore, int(self.sens[2]) + 1)
+        angStar = np.deg2rad(starboard)
+        angVecStar = np.linspace(-self.sens[0]/2 + angStar, self.sens[0]/2 + angStar, int(self.sens[2]) + 1)
+
+        foreNew = fore
+        starNew = -starboard
+        imDataNew = np.fliplr(imData)
+        angVecForeNew = angVecFore
+        angVecStarNew = -np.flip(angVecStar)
+
+        nRow = imDataNew.shape[0]
+        nCol = imDataNew.shape[1]
+        selectIndRow = [0, nRow // 4, nRow // 2, nRow - 1 - (nRow // 4), nRow - 1]
+        selectIndCol = [0, nCol // 4, nCol // 2, nCol - 1 - (nCol // 4), nCol - 1]
+
+        # Plot GSD over array 
+        fig, ax = plt.subplots(figsize=(10, 8))
+        if matMin > 0 and matMax > 0:
+            im = ax.imshow(imDataNew, vmin = matMin, vmax = matMax, origin='lower', cmap='coolwarm', interpolation='nearest')
+        else:
+            im = ax.imshow(imDataNew, origin='lower', cmap='coolwarm', interpolation='nearest')
+        cbar = fig.colorbar(im)
+        cbar.set_label('Ground Sampling Distance (m)')
+        stepRow = (nRow - 1) / (len(selectIndRow) - 1)
+        stepCol = (nCol - 1) / (len(selectIndCol) - 1)
+        ax.set_yticks(np.arange(0, nRow, stepRow))
+        ax.set_xticks(np.arange(0, nCol, stepCol))
+        ax.set_xticklabels(np.round(np.rad2deg(angVecStarNew[selectIndRow]), decimals=2))
+        ax.set_yticklabels(np.round(np.rad2deg(angVecForeNew[selectIndCol]), decimals=2))
+        ax.set_xlabel('Starboard/Port Direction (°)')
+        ax.set_ylabel('Fore/Aft Direction (°)')
+        ax.set_title(f'Pixel-by-Pixel GSD Off-Nadir ({foreNew}°,{starNew}°)')
+
+        # Save the graphic and data file
+        fileName = f'GSDarray_{altitude}_km_offnadir_({foreNew},{starNew}).png'
+        fullPath = path / fileName
+        plt.savefig(fullPath)
+        print(f"Plot saved as GSDarray_{altitude}_km_offnadir_({foreNew},{starNew})")
+
+        matFileName = f'GSDarray_matrix_{altitude}_km_offnadir_({foreNew},{starNew})'
+        fullMatPath = path / matFileName
+        np.save(fullMatPath, imDataNew)
+        print(f"Array saved as GSDarray_matrix_{altitude}_km_offnadir_({foreNew},{starNew})")
+
+    def flipOne2Three(self, path, fore, starboard, altitude, matMin, matMax, imData):
+    
+        #################### This first section will translate quadrant one to three ####################
+        angFore = np.deg2rad(fore)
+        angVecFore = np.linspace(-self.sens[0]/2 + angFore, self.sens[0]/2 + angFore, int(self.sens[2]) + 1)
+        angStar = np.deg2rad(starboard)
+        angVecStar = np.linspace(-self.sens[0]/2 + angStar, self.sens[0]/2 + angStar, int(self.sens[2]) + 1)
+
+        foreNew = -fore
+        starNew = -starboard
+        imDataNew = np.fliplr(imData)
+        angVecForeNew = -np.flip(angVecFore)
+        angVecStarNew = -np.flip(angVecStar)
+
+        nRow = imDataNew.shape[0]
+        nCol = imDataNew.shape[1]
+        selectIndRow = [0, nRow // 4, nRow // 2, nRow - 1 - (nRow // 4), nRow - 1]
+        selectIndCol = [0, nCol // 4, nCol // 2, nCol - 1 - (nCol // 4), nCol - 1]
+
+        # Plot GSD over array 
+        fig, ax = plt.subplots(figsize=(10, 8))
+        if matMin > 0 and matMax > 0:
+            im = ax.imshow(imDataNew, vmin = matMin, vmax = matMax, origin='lower', cmap='coolwarm', interpolation='nearest')
+        else:
+            im = ax.imshow(imDataNew, origin='lower', cmap='coolwarm', interpolation='nearest')
+        cbar = fig.colorbar(im)
+        cbar.set_label('Ground Sampling Distance (m)')
+        stepRow = (nRow - 1) / (len(selectIndRow) - 1)
+        stepCol = (nCol - 1) / (len(selectIndCol) - 1)
+        ax.set_yticks(np.arange(0, nRow, stepRow))
+        ax.set_xticks(np.arange(0, nCol, stepCol))
+        ax.set_xticklabels(np.round(np.rad2deg(angVecStarNew[selectIndRow]), decimals=2))
+        ax.set_yticklabels(np.round(np.rad2deg(angVecForeNew[selectIndCol]), decimals=2))
+        ax.set_xlabel('Starboard/Port Direction (°)')
+        ax.set_ylabel('Fore/Aft Direction (°)')
+        ax.set_title(f'Pixel-by-Pixel GSD Off-Nadir ({foreNew}°,{starNew}°)')
+
+        # Save the graphic and data file
+        fileName = f'GSDarray_{altitude}_km_offnadir_({foreNew},{starNew}).png'
+        fullPath = path / fileName
+        plt.savefig(fullPath)
+        print(f"Plot saved as GSDarray_{altitude}_km_offnadir_({foreNew},{starNew})")
+
+        matFileName = f'GSDarray_matrix_{altitude}_km_offnadir_({foreNew},{starNew})'
+        fullMatPath = path / matFileName
+        np.save(fullMatPath, imDataNew)
+        print(f"Array saved as GSDarray_matrix_{altitude}_km_offnadir_({foreNew},{starNew})")
+
+    def flipOne2Four(self, path, fore, starboard, altitude, matMin, matMax, imData):
+
+        #################### This first section will translate quadrant one to four ####################
+        angFore = np.deg2rad(fore)
+        angVecFore = np.linspace(-self.sens[0]/2 + angFore, self.sens[0]/2 + angFore, int(self.sens[2]) + 1)
+        angStar = np.deg2rad(starboard)
+        angVecStar = np.linspace(-self.sens[0]/2 + angStar, self.sens[0]/2 + angStar, int(self.sens[2]) + 1)
+
+        foreNew = -fore
+        starNew = starboard
+        imDataNew = np.fliplr(imData)
+        angVecForeNew = -np.flip(angVecFore)
+        angVecStarNew = angVecStar
+
+        nRow = imDataNew.shape[0]
+        nCol = imDataNew.shape[1]
+        selectIndRow = [0, nRow // 4, nRow // 2, nRow - 1 - (nRow // 4), nRow - 1]
+        selectIndCol = [0, nCol // 4, nCol // 2, nCol - 1 - (nCol // 4), nCol - 1]
+
+        # Plot GSD over array 
+        fig, ax = plt.subplots(figsize=(10, 8))
+        if matMin > 0 and matMax > 0:
+            im = ax.imshow(imDataNew, vmin = matMin, vmax = matMax, origin='lower', cmap='coolwarm', interpolation='nearest')
+        else:
+            im = ax.imshow(imDataNew, origin='lower', cmap='coolwarm', interpolation='nearest')
+        cbar = fig.colorbar(im)
+        cbar.set_label('Ground Sampling Distance (m)')
+        stepRow = (nRow - 1) / (len(selectIndRow) - 1)
+        stepCol = (nCol - 1) / (len(selectIndCol) - 1)
+        ax.set_yticks(np.arange(0, nRow, stepRow))
+        ax.set_xticks(np.arange(0, nCol, stepCol))
+        ax.set_xticklabels(np.round(np.rad2deg(angVecStarNew[selectIndRow]), decimals=2))
+        ax.set_yticklabels(np.round(np.rad2deg(angVecForeNew[selectIndCol]), decimals=2))
+        ax.set_xlabel('Starboard/Port Direction (°)')
+        ax.set_ylabel('Fore/Aft Direction (°)')
+        ax.set_title(f'Pixel-by-Pixel GSD Off-Nadir ({foreNew}°,{starNew}°)')
+
+        # Save the graphic and data file
+        fileName = f'GSDarray_{altitude}_km_offnadir_({foreNew},{starNew}).png'
+        fullPath = path / fileName
+        plt.savefig(fullPath)
+        print(f"Plot saved as GSDarray_{altitude}_km_offnadir_({foreNew},{starNew})")
+
+        matFileName = f'GSDarray_matrix_{altitude}_km_offnadir_({foreNew},{starNew})'
+        fullMatPath = path / matFileName
+        np.save(fullMatPath, imDataNew)
+        print(f"Array saved as GSDarray_matrix_{altitude}_km_offnadir_({foreNew},{starNew})")

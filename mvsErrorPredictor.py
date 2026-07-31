@@ -49,6 +49,8 @@ def computeMVSCostMap(gsdMats, offNadAngles, sigmaPix, eMax):
     
     # Force any pixel with < 2 views to immediately fail with a cost of 1.0
     costMap[invalidStereoMask] = 1.0
+
+    print(costMap)
     
     return np.clip(costMap, 0.0, 1.0)
 
@@ -75,7 +77,7 @@ if __name__ == "__main__":
         gsdMats=dataMats,
         offNadAngles=angles,
         sigmaPix=0.5,
-        eMax=3.0
+        eMax=35.0
     )
     
     print(f"Cost processed for {5} views!")
