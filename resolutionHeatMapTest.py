@@ -53,9 +53,12 @@ def runTest():
 
     pathHeatmap = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km")
 
-    _ = gridded.getGSDArray(altitude, -25.0, -25.0, minGSD, maxGSD, True, True, pathHeatmap)
-    _ = gridded.getGSDArray(altitude, -25.0, 25.0, minGSD, maxGSD, True, True, pathHeatmap)
-    _ = gridded.getGSDArray(altitude, 25.0, -25.0, minGSD, maxGSD, True, True, pathHeatmap)
+    flips = np.array([5.0, 10.0, 15.0, 20.0, 25.0])
+
+    for i in range(len(flips)):
+        for j in range(len(flips)):
+            imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({flips[i]},{flips[j]}).npy"))
+            gridded.flipOne2Two(pathHeatmap, flips[i], flips[j], altitude, minGSD, maxGSD, imData)
 
     print()
 

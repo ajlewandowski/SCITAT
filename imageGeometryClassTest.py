@@ -49,47 +49,56 @@ def runTest():
     minGSD, maxGSD = gridded.getColorbarMinMax(angVec, altitude)
 
     pathHeatmap = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km")   
-
     imageGeo = imageGeometry(noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude)
+    imAngles = np.array([[-25.0, 25.0], [25.0, 25.0], [-25.0, -25.0]])
+    im1 = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[0,0]},{imAngles[0,1]}).npy"))
+    im2 = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[1,0]},{imAngles[1,1]}).npy"))
+    im3 = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[2,0]},{imAngles[2,1]}).npy"))
 
-    # imLoad = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_(25.0,25.0).npy"))
-    # rowTarg, colTarg = imageGeo.getTargetPlacement(imLoad)
-    # print(rowTarg)
-    # print(colTarg)
+    im1Data = np.array([imAngles[0,0], imAngles[0,1], altitude])
+    im2Data = np.array([imAngles[1,0], imAngles[1,1], altitude])
+    im3Data = np.array([imAngles[2,0], imAngles[2,1], altitude])
 
-    # imLoad = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_(-25.0,25.0).npy"))
-    # rowTarg, colTarg = imageGeo.getTargetPlacement(imLoad)
-    # print(rowTarg)
-    # print(colTarg)
+    cost = imageGeo.getCostFunction(im1, im1Data, im2, im2Data, im3, im3Data, imAngles)
+    print()
+    print(f"The cost for the following images of ({imAngles[0,0]},{imAngles[0,1]}), ({imAngles[1,0]},{imAngles[1,1]}), ({imAngles[2,0]},{imAngles[2,1]})")
+    print(cost)
 
-    imLoad1 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_(0.0,0.0).npy"))
-    rowTarg1, colTarg1 = imageGeo.getTargetPlacement(imLoad1)
+    overlapMean, overlapSlices, overlapRad = imageGeo.getOverlapRadius(im1, im1Data, im1, im2Data, im1, im3Data)
+    print("Overlap Radius")
+    print(overlapRad)
 
-    imLoad2 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_(15.0,15.0).npy"))
-    rowTarg2, colTarg2 = imageGeo.getTargetPlacement(imLoad2)
+    # errGSD = imageGeo.getGSDError(overlapMean)
+    # print()
+    # print("Average GSD Error normalized in the overlap region")
+    # print(errGSD)
 
-    imData1 = np.array([0.0, 0.0, rowTarg1, colTarg1])
-    row1, col1 = imageGeo.getImCenterCoords(imLoad1, imData1)
-    print(row1)
-    print(col1)
+    # bhRatio = imageGeo.getBHRatio(imData1, imData2, imData3)
+    # print()
+    # print("Average Base to Height Ratio between all the images")
+    # print(bhRatio)
 
-    imData2 = np.array([15.0, 15.0, rowTarg2, colTarg2])
-    row2, col2 = imageGeo.getImCenterCoords(imLoad2, imData2)
-    print(row2)
-    print(col2)
+    # orthoAvg = imageGeo.getOrthogonality(imLoad1, imData1, imLoad2, imData2, imLoad3, imData3)
+    # print()
+    # print("Average dot product between images, closer to zero more orthogonal")
+    # print(orthoAvg)
 
-    overPct = imageGeo.getOverlapPct(imLoad1, imData1, imLoad2, imData2)
-    print(overPct)
-    
-
-
-
-
-    # errPix = imageGeo.getUsablePix(imLoad)
-
+    # errPix = imageGeo.getUsablePix(imLoad1)
+    # print()
+    # print("Get usable pixels in the image that are sub-1.25 times the min GSD")
     # print(errPix)
 
+    costMap = imageGeo.computeMVSCostMap(overlapSlices, imAngles, 0.5, 35.0)
     print()
+    print("MVS cost map")
+    print(costMap)
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    im = ax.imshow(costMap, origin='lower', cmap='coolwarm', interpolation='nearest')
+    cbar = fig.colorbar(im)
+    cbar.set_label('MVS Cost (m)')
+    ax.set_title(f'Cost map')
+    plt.show()
 
 
 

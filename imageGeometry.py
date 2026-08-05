@@ -24,33 +24,99 @@ class imageGeometry:
         self.maxGSD = maxGSD
         self.alt = altitude
 
-        self.wgsSMA = 6378137.0
         self.wgsf = 1 / 298.257223563
-        self.ae = 6378137
+        self.ae = 6378137.0
+        self.wgsSMA = self.ae
 
         self.targetBHCanopy = 0.25
         self.targetBH = 1.0
         self.targetOverlap = 75.0
         self.pixGSDlimFactor = 0.25
 
-    def getCostFunction(self, im1, im2):
+    def getCostFunction(self, im1, im1Data, im2, im2Data, im3, im3Data, imAngles):
 
-        cost = 1.0
+        overlapMean, overlapSlices, overlapRad = self.getOverlapRadius(im1, im1Data, im2, im2Data, im3, im3Data)
+
+        errOverlap = 1.0 - (((im1.shape[0] // 2) - overlapRad) / (im1.shape[0] // 2))
+        
+        errGSD = self.getGSDError(overlapMean)
+        
+        bhRatio = self.getBHRatio(im1Data, im2Data, im3Data)
+
+        errbhRatio = 1.0 - (abs(self.targetBH - bhRatio) / self.targetBH)
+        
+        errOrthoAvg = self.getOrthogonality(im1, im1Data, im2, im2Data, im3, im3Data)
+        
+        costMap = self.computeMVSCostMap(overlapSlices, imAngles, 0.5, 35.0)
+
+        errCostMap = np.mean(costMap)
+        
+        cost = (errOverlap + errGSD + errbhRatio + errOrthoAvg + errCostMap)
 
         return cost
 
-    def getOverlapPct(self, im1, im1Data, im2, im2Data):
+    def getOverlapRadius(self, im1, im1Data, im2, im2Data, im3, im3Data, nan_policy="propagate", dtype=np.float64):
 
         im1Row, im1Col = self.getImCenterCoords(im1, im1Data)
         im2Row, im2Col = self.getImCenterCoords(im2, im2Data)
+        im3Row, im3Col = self.getImCenterCoords(im3, im3Data)
 
-        rowDiff = np.abs(im1Row - im2Row)
-        colDiff = np.abs(im1Col - im2Col)
+        shape = (im1.shape[0], im1.shape[1])
+        targets = np.array([[im1Row, im1Col],[im2Row, im2Col],[im3Row, im3Col]])
 
-        overlapPix = (im1.shape[0] - rowDiff)*colDiff + rowDiff*colDiff + (im1.shape[1] - colDiff)*rowDiff
-        overlapPct = 100 - (overlapPix * 100 / (im1.shape[0]*im1.shape[1]))
+        images = [im1, im2, im3]
 
-        return overlapPct
+        """
+        Align N images on their targets, cut the largest common window, and
+        average the frames pixel-by-pixel.
+
+        images  : sequence of N 2-D arrays
+        targets : (N, 2) (row, col) target positions measured from the center
+                pixel, i.e. (0, 0) is index (nrows//2, ncols//2)
+        nan_policy : "propagate" -> a NaN in any frame gives NaN in the mean
+                    "omit"      -> average over the valid frames only
+
+        Returns (mean, slices, r):
+            mean   : (2k+1, 2k+1) averaged cutout, target at [k, k]
+            slices : list of N (row_slice, col_slice) tuples, one per input image
+            r      : exact overlap radius in pixels (k = floor(r))
+        """
+        imgs = list(images)
+        t = np.atleast_2d(np.asarray(targets, dtype=float))
+
+        if len(imgs) != len(t):
+            raise ValueError(f"{len(imgs)} images but {len(t)} targets")
+        if t.shape[1] != 2:
+            raise ValueError("targets must have shape (N, 2) as (row, col)")
+
+        shapes = np.array([im.shape[:2] for im in imgs])
+        abs_t = shapes // 2 + t                      # absolute index of each target
+
+        if np.any(abs_t < 0) or np.any(abs_t > shapes - 1):
+            bad = np.where(np.any((abs_t < 0) | (abs_t > shapes - 1), axis=1))[0]
+            raise ValueError(f"target(s) outside the image: {bad.tolist()}")
+
+        r = float(np.min(np.concatenate([abs_t, shapes - 1 - abs_t], axis=1)))
+        k = int(np.floor(r))
+
+        ai = np.rint(abs_t).astype(int)
+        slices = [(slice(row - k, row + k + 1), slice(col - k, col + k + 1))
+                for row, col in ai]
+
+        stack = np.stack([im[s] for im, s in zip(imgs, slices)]).astype(dtype, copy=False)
+
+        if nan_policy == "omit":
+            valid = np.isfinite(stack)
+            count = valid.sum(axis=0)
+            with np.errstate(invalid="ignore"):
+                mean = np.nanmean(np.where(valid, stack, np.nan), axis=0)
+            mean[count == 0] = np.nan
+        elif nan_policy == "propagate":
+            mean = stack.mean(axis=0)
+        else:
+            raise ValueError("nan_policy must be 'propagate' or 'omit'")
+
+        return mean, stack, r
 
     def getImCenterCoords(self, im, imData):
         """ The output coordinate is relative to the center of image, so where is target at optimal GSD relative to image center """
@@ -61,39 +127,90 @@ class imageGeometry:
         star = imData[1]
 
         row, col = self.getTargetPlacement(im)
-        
-        if fore > 0.0 and star > 0.0:
-            targCenRow = -(im.shape[0] // 2 - row)
-            targCenCol = -(im.shape[1] // 2 - col)
-        if fore < 0.0 and star > 0.0:
-            targCenRow = (im.shape[0] // 2 - row)
-            targCenCol = -(im.shape[1] // 2 - col)
-        if fore < 0.0 and star < 0.0:
-            targCenRow = (im.shape[0] // 2 - row)
-            targCenCol = (im.shape[1] // 2 - col)
-        if fore > 0.0 and star < 0.0:
-            targCenRow = -(im.shape[0] // 2 - row)
-            targCenCol = (im.shape[1] // 2 - col)
-        if fore == 0.0 and star == 0.0:
-            return 0, 0
+
+        targCenRow = (row - im.shape[0] // 2)
+        targCenCol = (col - im.shape[1] // 2)
 
         return targCenRow, targCenCol
 
-    def getBHRatio(self, im1, im2):
+    def getBHRatio(self, im1Data, im2Data, im3Data):
 
-        BHRatio = 1.0
+        im1Fore = im1Data[0]
+        im1Star = im1Data[1]
+        im1alt = im1Data[2]
+
+        im2Fore = im2Data[0]
+        im2Star = im2Data[1]
+        im2alt = im2Data[2]
+
+        im3Fore = im3Data[0]
+        im3Star = im3Data[1]
+        im3alt = im3Data[2]
+
+        BHs = []
+
+        # Calculating the BH ratio for 1 to 2
+        dBF12 = np.abs(im1alt * np.tan(np.deg2rad(im1Fore)) - im2alt * np.tan(np.deg2rad(im2Fore)))
+        dBS12 = np.abs(im1alt * np.tan(np.deg2rad(im1Star)) - im2alt * np.tan(np.deg2rad(im2Star)))
+        dB12 = np.sqrt(dBF12**2 + dBS12**2)
+        BH12 = dB12 / ((im1alt + im2alt)/2)
+        BHs.append(BH12)
+
+        # Calculating the BH ratio for 1 to 3
+        dBF13 = np.abs(im1alt * np.tan(np.deg2rad(im1Fore)) - im3alt * np.tan(np.deg2rad(im3Fore)))
+        dBS13 = np.abs(im1alt * np.tan(np.deg2rad(im1Star)) - im3alt * np.tan(np.deg2rad(im3Star)))
+        dB13 = np.sqrt(dBF13**2 + dBS13**2)
+        BH13 = dB13 / ((im1alt + im3alt)/2)
+        BHs.append(BH13)
+
+        # Calculating the BH ratio for 2 to 3
+        dBF23 = np.abs(im2alt * np.tan(np.deg2rad(im2Fore)) - im3alt * np.tan(np.deg2rad(im3Fore)))
+        dBS23 = np.abs(im2alt * np.tan(np.deg2rad(im2Star)) - im3alt * np.tan(np.deg2rad(im3Star)))
+        dB23 = np.sqrt(dBF23**2 + dBS23**2)
+        BH23 = dB23 / ((im2alt + im3alt)/2)
+        BHs.append(BH23)
+
+        BHRatio = np.mean(np.array(BHs))
 
         return BHRatio
 
-    def getOrthogonality(self, im1, im2):
+    def getOrthogonality(self, im1, im1Data, im2, im2Data, im3, im3Data):
 
-        sumDotProds = 1.0
+        rowOff1, colOff1 = self.getImCenterCoords(im1, im1Data)
+        rowOff2, colOff2 = self.getImCenterCoords(im2, im2Data)
+        rowOff3, colOff3 = self.getImCenterCoords(im3, im3Data)
 
-        return sumDotProds
+        newFore1 = np.deg2rad(im1Data[0]) - np.sign(im1Data[0])*rowOff1*round(self.IFOVbase)
+        newStar1 = np.deg2rad(im1Data[1]) - np.sign(im1Data[1])*colOff1*round(self.IFOVbase)
 
-    def getGSDError(self, im1, im2):
+        newFore2 = np.deg2rad(im2Data[0]) - np.sign(im2Data[0])*rowOff2*round(self.IFOVbase)
+        newStar2 = np.deg2rad(im2Data[1]) - np.sign(im2Data[1])*colOff2*round(self.IFOVbase)
 
-        errGSD = 1.0
+        newFore3 = np.deg2rad(im3Data[0]) - np.sign(im3Data[0])*rowOff3*round(self.IFOVbase)
+        newStar3 = np.deg2rad(im3Data[1]) - np.sign(im3Data[1])*colOff3*round(self.IFOVbase)
+
+        satRelTarg1 = np.array([im1Data[2]*np.tan(newStar1), im1Data[2]*np.tan(newFore1), im1Data[2]])
+        satRelTarg2 = np.array([im2Data[2]*np.tan(newStar2), im2Data[2]*np.tan(newFore2), im2Data[2]])
+        satRelTarg3 = np.array([im3Data[2]*np.tan(newStar3), im3Data[2]*np.tan(newFore3), im3Data[2]])
+        
+        satRel1 = satRelTarg1 / np.linalg.norm(satRelTarg1)
+        satRel2 = satRelTarg2 / np.linalg.norm(satRelTarg2)
+        satRel3 = satRelTarg3 / np.linalg.norm(satRelTarg3)
+
+        # Dot product of one and two
+        dot12 = np.dot(satRel1, satRel2)
+        dot23 = np.dot(satRel2, satRel3)
+        dot13 = np.dot(satRel1, satRel3)
+        
+        dotProdAvg = (abs(dot12) + abs(dot23) + abs(dot13)) / 3.0
+
+        return dotProdAvg
+
+    def getGSDError(self, overlapMean):
+
+        meanGSD = np.mean(overlapMean)
+
+        errGSD = (meanGSD - self.minGSD) / (self.maxGSD - self.minGSD)
 
         return errGSD
 
@@ -107,11 +224,12 @@ class imageGeometry:
 
         return errPix
 
-    def computeMVSCostMap(self, gsdMats, offNadAngles, sigmaPix, eMax):
+    def computeMVSCostMap(self, gsdMats, imAngles, sigmaPix, eMax):
         """
         Computes MVS cost map where unusable pixels have been set to np.nan.
         All input matrices must still be the same dimensional shape (e.g., 1000x1000).
         """
+        offNadAngles = np.array(imAngles.flatten())
         # 1. 3D Vectorization
         gsdCube = np.stack(gsdMats, axis=0)
         
@@ -229,7 +347,7 @@ class imageGeometry:
     
         rtol = 64 * np.finfo(dtype).eps if tie_rtol is None else float(tie_rtol)
     
-        def _plateau_center(cost):
+        def plateauCenter(cost):
             """Centroid of the best connected tied plateau in `cost`."""
             idx = np.unravel_index(int(np.argmin(cost)), cost.shape)
             best = float(cost[idx])
@@ -262,14 +380,14 @@ class imageGeometry:
         # Scalar `size` decomposes into two O(n) 1D passes; a disc `footprint`
         # would be O(n*k^2) and crawl on a 38M-pixel frame.
         worst = maximum_filter(work, size=2 * rw + 1, mode="nearest") if rw else work
-        free_r, free_c, _ = _plateau_center(worst)
+        free_r, free_c, _ = plateauCenter(worst)
         free_r, free_c = free_r * d, free_c * d
     
         cost = np.full(worst.shape, np.inf, dtype=dtype)
         keep = (slice(mw, hw - mw), slice(mw, ww - mw))
         cost[keep] = worst[keep]
         cbest = float(cost.min())
-        row, col, _ = _plateau_center(cost)
+        row, col, _ = plateauCenter(cost)
         row, col = row * d, col * d
     
         if d > 1:
@@ -284,7 +402,7 @@ class imageGeometry:
             sub_worst = maximum_filter(sub, size=2 * r + 1, mode="nearest") if r else sub
             win = sub_worst[lo_r - sr:lo_r - sr + hi_r - lo_r,
                             lo_c - sc:lo_c - sc + hi_c - lo_c]
-            wr, wc, _ = _plateau_center(win)
+            wr, wc, _ = plateauCenter(win)
             row, col = lo_r + wr, lo_c + wc
     
         # Round half to even, so a plateau centred between two pixels does not
