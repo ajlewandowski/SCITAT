@@ -33,38 +33,31 @@ class imageGeometry:
         self.targetOverlap = 75.0
         self.pixGSDlimFactor = 0.25
 
-    def getCostFunction(self, im1, im1Data, im2, im2Data, im3, im3Data, imAngles):
+    def getCostFunction(self, ims, imData, imAngles):
 
-        overlapMean, overlapSlices, overlapRad = self.getOverlapRadius(im1, im1Data, im2, im2Data, im3, im3Data)
-
-        errOverlap = 1.0 - (((im1.shape[0] // 2) - overlapRad) / (im1.shape[0] // 2))
+        overlapMean, overlapSlices, overlapRad = self.getOverlapRadius(ims, imData)
+        errOverlap = 1.0 - (((ims[0].shape[0] // 2) - overlapRad) / (ims[0].shape[0] // 2))
         
         errGSD = self.getGSDError(overlapMean)
         
-        bhRatio = self.getBHRatio(im1Data, im2Data, im3Data)
-
+        bhRatio = self.getBHRatio(imData)
         errbhRatio = 1.0 - (abs(self.targetBH - bhRatio) / self.targetBH)
         
-        errOrthoAvg = self.getOrthogonality(im1, im1Data, im2, im2Data, im3, im3Data)
+        errOrthoAvg = self.getOrthogonality(ims, imData)
         
         costMap = self.computeMVSCostMap(overlapSlices, imAngles, 0.5, 35.0)
-
         errCostMap = np.mean(costMap)
         
-        cost = (errOverlap + errGSD + errbhRatio + errOrthoAvg + errCostMap)
+        cost = (0.1*errOverlap + 0.2*errGSD + 0.1*errbhRatio + 0.1*errOrthoAvg + 0.5*errCostMap)
 
         return cost
 
-    def getOverlapRadius(self, im1, im1Data, im2, im2Data, im3, im3Data, nan_policy="propagate", dtype=np.float64):
+    def getOverlapRadius(self, ims, imData, nan_policy="propagate", dtype=np.float64):
 
-        im1Row, im1Col = self.getImCenterCoords(im1, im1Data)
-        im2Row, im2Col = self.getImCenterCoords(im2, im2Data)
-        im3Row, im3Col = self.getImCenterCoords(im3, im3Data)
-
-        shape = (im1.shape[0], im1.shape[1])
-        targets = np.array([[im1Row, im1Col],[im2Row, im2Col],[im3Row, im3Col]])
-
-        images = [im1, im2, im3]
+        imTargs = np.zeros((len(ims),2))
+        for i, im in enumerate(ims):
+            imRow, imCol = self.getImCenterCoords(im, imData[i,:])
+            imTargs[i,:] = np.array([imRow, imCol])
 
         """
         Align N images on their targets, cut the largest common window, and
@@ -81,8 +74,8 @@ class imageGeometry:
             slices : list of N (row_slice, col_slice) tuples, one per input image
             r      : exact overlap radius in pixels (k = floor(r))
         """
-        imgs = list(images)
-        t = np.atleast_2d(np.asarray(targets, dtype=float))
+        imgs = list(ims)
+        t = np.atleast_2d(np.asarray(imTargs, dtype=float))
 
         if len(imgs) != len(t):
             raise ValueError(f"{len(imgs)} images but {len(t)} targets")
@@ -133,76 +126,50 @@ class imageGeometry:
 
         return targCenRow, targCenCol
 
-    def getBHRatio(self, im1Data, im2Data, im3Data):
-
-        im1Fore = im1Data[0]
-        im1Star = im1Data[1]
-        im1alt = im1Data[2]
-
-        im2Fore = im2Data[0]
-        im2Star = im2Data[1]
-        im2alt = im2Data[2]
-
-        im3Fore = im3Data[0]
-        im3Star = im3Data[1]
-        im3alt = im3Data[2]
+    def getBHRatio(self, imData):
 
         BHs = []
 
-        # Calculating the BH ratio for 1 to 2
-        dBF12 = np.abs(im1alt * np.tan(np.deg2rad(im1Fore)) - im2alt * np.tan(np.deg2rad(im2Fore)))
-        dBS12 = np.abs(im1alt * np.tan(np.deg2rad(im1Star)) - im2alt * np.tan(np.deg2rad(im2Star)))
-        dB12 = np.sqrt(dBF12**2 + dBS12**2)
-        BH12 = dB12 / ((im1alt + im2alt)/2)
-        BHs.append(BH12)
+        for i in range(imData.shape[0]):
+            for j in range(i+1, imData.shape[0]):
+                imFore1 = imData[i,0]
+                imStar1 = imData[i,1]
+                imAlt1 = imData[i,2]
 
-        # Calculating the BH ratio for 1 to 3
-        dBF13 = np.abs(im1alt * np.tan(np.deg2rad(im1Fore)) - im3alt * np.tan(np.deg2rad(im3Fore)))
-        dBS13 = np.abs(im1alt * np.tan(np.deg2rad(im1Star)) - im3alt * np.tan(np.deg2rad(im3Star)))
-        dB13 = np.sqrt(dBF13**2 + dBS13**2)
-        BH13 = dB13 / ((im1alt + im3alt)/2)
-        BHs.append(BH13)
+                imFore2 = imData[j,0]
+                imStar2 = imData[j,1]
+                imAlt2 = imData[j,2]
 
-        # Calculating the BH ratio for 2 to 3
-        dBF23 = np.abs(im2alt * np.tan(np.deg2rad(im2Fore)) - im3alt * np.tan(np.deg2rad(im3Fore)))
-        dBS23 = np.abs(im2alt * np.tan(np.deg2rad(im2Star)) - im3alt * np.tan(np.deg2rad(im3Star)))
-        dB23 = np.sqrt(dBF23**2 + dBS23**2)
-        BH23 = dB23 / ((im2alt + im3alt)/2)
-        BHs.append(BH23)
+                dBF = np.abs(imAlt1 * np.tan(np.deg2rad(imFore1)) - imAlt2 * np.tan(np.deg2rad(imFore2)))
+                dBS = np.abs(imAlt1 * np.tan(np.deg2rad(imStar1)) - imAlt2 * np.tan(np.deg2rad(imStar2)))
+                dB = np.sqrt(dBF**2 + dBS**2)
+                BH = dB / ((imAlt1 + imAlt2)/2)
+                BHs.append(BH)
 
         BHRatio = np.mean(np.array(BHs))
 
         return BHRatio
 
-    def getOrthogonality(self, im1, im1Data, im2, im2Data, im3, im3Data):
+    def getOrthogonality(self, ims, imData):
 
-        rowOff1, colOff1 = self.getImCenterCoords(im1, im1Data)
-        rowOff2, colOff2 = self.getImCenterCoords(im2, im2Data)
-        rowOff3, colOff3 = self.getImCenterCoords(im3, im3Data)
+        relVecs = np.zeros((imData.shape[0],3))
+        for k in range(imData.shape[0]):
+            rowOff, colOff = self.getImCenterCoords(ims[k], imData[k,:])
 
-        newFore1 = np.deg2rad(im1Data[0]) - np.sign(im1Data[0])*rowOff1*round(self.IFOVbase)
-        newStar1 = np.deg2rad(im1Data[1]) - np.sign(im1Data[1])*colOff1*round(self.IFOVbase)
+            newFore1 = np.deg2rad(imData[k,0]) - np.sign(imData[k,0])*rowOff*round(self.IFOVbase)
+            newStar1 = np.deg2rad(imData[k,1]) - np.sign(imData[k,1])*colOff*round(self.IFOVbase)
 
-        newFore2 = np.deg2rad(im2Data[0]) - np.sign(im2Data[0])*rowOff2*round(self.IFOVbase)
-        newStar2 = np.deg2rad(im2Data[1]) - np.sign(im2Data[1])*colOff2*round(self.IFOVbase)
+            satRelTarg = np.array([imData[k,2]*np.tan(newStar1), imData[k,2]*np.tan(newFore1), imData[k,2]])
+            
+            relVecs[k,:] = satRelTarg / np.linalg.norm(satRelTarg)
 
-        newFore3 = np.deg2rad(im3Data[0]) - np.sign(im3Data[0])*rowOff3*round(self.IFOVbase)
-        newStar3 = np.deg2rad(im3Data[1]) - np.sign(im3Data[1])*colOff3*round(self.IFOVbase)
-
-        satRelTarg1 = np.array([im1Data[2]*np.tan(newStar1), im1Data[2]*np.tan(newFore1), im1Data[2]])
-        satRelTarg2 = np.array([im2Data[2]*np.tan(newStar2), im2Data[2]*np.tan(newFore2), im2Data[2]])
-        satRelTarg3 = np.array([im3Data[2]*np.tan(newStar3), im3Data[2]*np.tan(newFore3), im3Data[2]])
+        dotProds = []
+        for i in range(imData.shape[0]):
+            for j in range(i+1, imData.shape[0]):
+                dotTemp = np.dot(relVecs[i,:], relVecs[j,:])
+                dotProds.append(dotTemp)
         
-        satRel1 = satRelTarg1 / np.linalg.norm(satRelTarg1)
-        satRel2 = satRelTarg2 / np.linalg.norm(satRelTarg2)
-        satRel3 = satRelTarg3 / np.linalg.norm(satRelTarg3)
-
-        # Dot product of one and two
-        dot12 = np.dot(satRel1, satRel2)
-        dot23 = np.dot(satRel2, satRel3)
-        dot13 = np.dot(satRel1, satRel3)
-        
-        dotProdAvg = (abs(dot12) + abs(dot23) + abs(dot13)) / 3.0
+        dotProdAvg = np.mean(dotProds)
 
         return dotProdAvg
 
@@ -436,3 +403,26 @@ class imageGeometry:
             "approximate": d > 1,
         }
         return irow, icol, info
+
+    def plotCostMap(self, costMap, imAngles, sigmaPix, eMax, pathCost):
+
+        fig, ax = plt.subplots(figsize=(10, 8))
+        im = ax.imshow(costMap, origin='lower', cmap='coolwarm', interpolation='nearest')
+        cbar = fig.colorbar(im)
+        cbar.set_label('Multi-View Stereo Cost')
+        ax.set_title(f'Cost Map for MVS with {imAngles.shape[0]} images, sigmaPix of {sigmaPix}, and eMax of {eMax}')
+        per_row = 4
+        items = [f"({a:+5.1f}, {b:+5.1f})" for a, b in imAngles]
+        rows = [ "   ".join(items[i:i+per_row]) for i in range(0, len(items), per_row) ]
+        note = "Angle sets:\n" + "\n".join(rows)
+        n_lines = note.count("\n") + 1
+        line_h = 0.022                      # ~fraction of figure height per line at fontsize 9
+        fig.subplots_adjust(bottom=0.10 + n_lines * line_h)
+        fig.text(0.5, 0.02, note, ha='center', va='bottom',
+                fontsize=9, family='monospace')
+
+        fileName = f'costmap_{imAngles.shape[0]}_images_{self.alt}_km.png'
+        fullPath = pathCost / fileName
+        plt.savefig(fullPath)
+        print(f'costmap_{imAngles.shape[0]}_images_{self.alt}_km.png')
+

@@ -50,55 +50,43 @@ def runTest():
 
     pathHeatmap = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km")   
     imageGeo = imageGeometry(noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude)
-    imAngles = np.array([[-25.0, 25.0], [25.0, 25.0], [-25.0, -25.0]])
-    im1 = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[0,0]},{imAngles[0,1]}).npy"))
-    im2 = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[1,0]},{imAngles[1,1]}).npy"))
-    im3 = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[2,0]},{imAngles[2,1]}).npy"))
+    # imAngles = np.array([[-6.0, 7.0],[6.0, -7.0],[-6.0, -7.0],[6.0, 7.0],[-7.0, 6.0],[7.0, -6.0],[-7.0, -6.0],[7.0, 6.0]])
 
-    im1Data = np.array([imAngles[0,0], imAngles[0,1], altitude])
-    im2Data = np.array([imAngles[1,0], imAngles[1,1], altitude])
-    im3Data = np.array([imAngles[2,0], imAngles[2,1], altitude])
 
-    cost = imageGeo.getCostFunction(im1, im1Data, im2, im2Data, im3, im3Data, imAngles)
+    imAngles = np.array([[-25.0,25.0],[25.0,25.0],[-25.0,-25.0],[25.0,-25.0],[0.0,0.0],[-15.0, 15.0],[15.0,15.0],[-15.0,-15.0],[15.0,-15.0],[-5.0, 5.0],[5.0,5.0],[-5.0,-5.0],[5.0,-5.0]])
+
+
+    ims = []
+    imData = np.zeros((imAngles.shape[0],3))
+    for k in range(imAngles.shape[0]):
+        im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+        ims.append(im)
+        imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
+
+    cost = imageGeo.getCostFunction(ims, imData, imAngles)
     print()
-    print(f"The cost for the following images of ({imAngles[0,0]},{imAngles[0,1]}), ({imAngles[1,0]},{imAngles[1,1]}), ({imAngles[2,0]},{imAngles[2,1]})")
+    print(f"The cost for {imAngles.shape[0]} images of:")
+    print()
+    print(imAngles)
+    print()
     print(cost)
+    print()
 
-    overlapMean, overlapSlices, overlapRad = imageGeo.getOverlapRadius(im1, im1Data, im1, im2Data, im1, im3Data)
+    overlapMean, overlapSlices, overlapRad = imageGeo.getOverlapRadius(ims, imData)
     print("Overlap Radius")
     print(overlapRad)
 
-    # errGSD = imageGeo.getGSDError(overlapMean)
-    # print()
-    # print("Average GSD Error normalized in the overlap region")
-    # print(errGSD)
+    sigmaPix = 0.5
+    eMax = 25.0
 
-    # bhRatio = imageGeo.getBHRatio(imData1, imData2, imData3)
-    # print()
-    # print("Average Base to Height Ratio between all the images")
-    # print(bhRatio)
-
-    # orthoAvg = imageGeo.getOrthogonality(imLoad1, imData1, imLoad2, imData2, imLoad3, imData3)
-    # print()
-    # print("Average dot product between images, closer to zero more orthogonal")
-    # print(orthoAvg)
-
-    # errPix = imageGeo.getUsablePix(imLoad1)
-    # print()
-    # print("Get usable pixels in the image that are sub-1.25 times the min GSD")
-    # print(errPix)
-
-    costMap = imageGeo.computeMVSCostMap(overlapSlices, imAngles, 0.5, 35.0)
+    costMap = imageGeo.computeMVSCostMap(overlapSlices, imAngles, sigmaPix, eMax)
     print()
-    print("MVS cost map")
-    print(costMap)
+    print("MVS cost map avg value")
+    print(np.mean(costMap))
 
-    fig, ax = plt.subplots(figsize=(10, 8))
-    im = ax.imshow(costMap, origin='lower', cmap='coolwarm', interpolation='nearest')
-    cbar = fig.colorbar(im)
-    cbar.set_label('MVS Cost (m)')
-    ax.set_title(f'Cost map')
-    plt.show()
+    pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km")   
+    imageGeo.plotCostMap(costMap, imAngles, sigmaPix, eMax, pathCost)
+    print()
 
 
 

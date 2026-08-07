@@ -53,12 +53,49 @@ def runTest():
 
     pathHeatmap = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km")
 
-    flips = np.array([5.0, 10.0, 15.0, 20.0, 25.0])
+    # flips = np.array([1.0,2.0,3.0,4.0])
 
-    for i in range(len(flips)):
-        for j in range(len(flips)):
-            imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({flips[i]},{flips[j]}).npy"))
-            gridded.flipOne2Two(pathHeatmap, flips[i], flips[j], altitude, minGSD, maxGSD, imData)
+    # for i in range(len(flips)):
+    #     for j in range(len(flips)):
+    #         imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({flips[i]},{flips[j]}).npy"))
+    #         gridded.flipOne2Two(pathHeatmap, flips[i], flips[j], altitude, minGSD, maxGSD, imData)
+    #         gridded.flipOne2Three(pathHeatmap, flips[i], flips[j], altitude, minGSD, maxGSD, imData)
+    #         gridded.flipOne2Four(pathHeatmap, flips[i], flips[j], altitude, minGSD, maxGSD, imData)
+
+    fore = 1.0
+    star = 1.0
+    imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({fore},{star}).npy"))
+    gridded.flipOne2Two(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+    gridded.flipOne2Three(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+    gridded.flipOne2Four(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+
+    fore = 6.0
+    star = 6.0
+    imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({fore},{star}).npy"))
+    gridded.flipOne2Two(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+    gridded.flipOne2Three(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+    gridded.flipOne2Four(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+
+    fore = 11.0
+    star = 11.0
+    imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({fore},{star}).npy"))
+    gridded.flipOne2Two(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+    gridded.flipOne2Three(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+    gridded.flipOne2Four(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+
+    fore = 16.0
+    star = 16.0
+    imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({fore},{star}).npy"))
+    gridded.flipOne2Two(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+    gridded.flipOne2Three(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+    gridded.flipOne2Four(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+
+    fore = 21.0
+    star = 21.0
+    imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({fore},{star}).npy"))
+    gridded.flipOne2Two(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+    gridded.flipOne2Three(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+    gridded.flipOne2Four(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
 
     print()
 
