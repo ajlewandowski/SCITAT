@@ -43,50 +43,54 @@ def runTest():
     stopAng = 25.0
     altitude = 705
 
-    print(f"Producing Ground Sampling Distance (GSD) Heatmaps from {startAng}° to {stopAng}° in steps of {stepAng}°.")
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target)
     angVec = np.arange(startAng, stopAng + stepAng, stepAng)
     minGSD, maxGSD = gridded.getColorbarMinMax(angVec, altitude)
 
-    pathHeatmap = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km")   
-    imageGeo = imageGeometry(noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude)
-    # imAngles = np.array([[-6.0, 7.0],[6.0, -7.0],[-6.0, -7.0],[6.0, 7.0],[-7.0, 6.0],[7.0, -6.0],[-7.0, -6.0],[7.0, 6.0]])
-
-
-    imAngles = np.array([[-25.0,25.0],[25.0,25.0],[-25.0,-25.0],[25.0,-25.0],[0.0,0.0],[-15.0, 15.0],[15.0,15.0],[-15.0,-15.0],[15.0,-15.0],[-5.0, 5.0],[5.0,5.0],[-5.0,-5.0],[5.0,-5.0]])
-
-
-    ims = []
-    imData = np.zeros((imAngles.shape[0],3))
-    for k in range(imAngles.shape[0]):
-        im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
-        ims.append(im)
-        imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
-
-    cost = imageGeo.getCostFunction(ims, imData, imAngles)
-    print()
-    print(f"The cost for {imAngles.shape[0]} images of:")
-    print()
-    print(imAngles)
-    print()
-    print(cost)
-    print()
-
-    overlapMean, overlapSlices, overlapRad = imageGeo.getOverlapRadius(ims, imData)
-    print("Overlap Radius")
-    print(overlapRad)
-
     sigmaPix = 0.5
     eMax = 25.0
+ 
+    imageGeo = imageGeometry(noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
 
-    costMap = imageGeo.computeMVSCostMap(overlapSlices, imAngles, sigmaPix, eMax)
-    print()
-    print("MVS cost map avg value")
-    print(np.mean(costMap))
+    for k in range(250):
+        rng = np.random.default_rng()
+        nImages = rng.integers(2, 30)
+        imAngles = rng.integers(-25, 26, size=(nImages,2)).astype(np.float64)
 
-    pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km")   
-    imageGeo.plotCostMap(costMap, imAngles, sigmaPix, eMax, pathCost)
-    print()
+        print()
+        print(f"This run has {nImages} images from the following angles:")
+        print(imAngles)
+        print()
+
+
+        ims = []
+        imData = np.zeros((imAngles.shape[0],3))
+        for k in range(imAngles.shape[0]):
+            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+            ims.append(im)
+            imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
+
+        cost = imageGeo.getCostFunction(ims, imData, imAngles)
+        print()
+        print(f"The cost for {imAngles.shape[0]} images of:")
+        print()
+        print(imAngles)
+        print()
+        print(cost)
+        print()
+
+        overlapMean, overlapSlices, overlapRad = imageGeo.getOverlapRadius(ims, imData)
+        print("Overlap Radius")
+        print(overlapRad["centered"]["rGeo"])
+
+        costMap = imageGeo.computeMVSCostMap(overlapSlices, imAngles, sigmaPix, eMax)
+        print()
+        print("MVS cost map avg value")
+        print(np.mean(costMap))
+
+        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km")   
+        imageGeo.plotCostMap(costMap, imAngles, sigmaPix, eMax, pathCost, cost)
+        print()
 
 
 

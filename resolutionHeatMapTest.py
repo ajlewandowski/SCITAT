@@ -41,61 +41,36 @@ def runTest():
     state84 = collect_orbit_track(L9, times, coordinates = OrbitCoordinate.WGS84, sat_sunlit = True, solar_altaz = True, solar_beta = True)
     stateECEF = collect_orbit_track(L9, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
 
-    startAng = 0.0
+    startAng = -25.0
     stepAng = 1.0
-    stopAng = 25.0
+    stopAng = 0.0
     altitude = 705
 
     # print(f"Producing Ground Sampling Distance (GSD) Heatmaps from {startAng}° to {stopAng}° in steps of {stepAng}°.")
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target)
-    angVecs = np.arange(startAng, stopAng + stepAng, stepAng)
-    minGSD, maxGSD = gridded.getColorbarMinMax(angVecs, altitude)
+    angVecsNeg = np.arange(startAng, stopAng + stepAng, stepAng)
+    minGSD, maxGSD = gridded.getColorbarMinMax(angVecsNeg, altitude)
+
+    startAng = 0.0
+    stepAng = 1.0
+    stopAng = 25.0
+    altitude = 705
+    
+    angVecsPos = np.arange(startAng, stopAng + stepAng, stepAng)
 
     pathHeatmap = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km")
 
-    # flips = np.array([1.0,2.0,3.0,4.0])
+    for i in range(len(angVecsNeg)):
+        for j in range(len(angVecsNeg)):
+            fig = gridded.getGSDArray(altitude, angVecsPos[i], angVecsNeg[j], minGSD, maxGSD, True, True, pathHeatmap)
+            plt.close()
 
-    # for i in range(len(flips)):
-    #     for j in range(len(flips)):
-    #         imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({flips[i]},{flips[j]}).npy"))
-    #         gridded.flipOne2Two(pathHeatmap, flips[i], flips[j], altitude, minGSD, maxGSD, imData)
-    #         gridded.flipOne2Three(pathHeatmap, flips[i], flips[j], altitude, minGSD, maxGSD, imData)
-    #         gridded.flipOne2Four(pathHeatmap, flips[i], flips[j], altitude, minGSD, maxGSD, imData)
-
-    fore = 1.0
-    star = 1.0
-    imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({fore},{star}).npy"))
-    gridded.flipOne2Two(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-    gridded.flipOne2Three(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-    gridded.flipOne2Four(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-
-    fore = 6.0
-    star = 6.0
-    imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({fore},{star}).npy"))
-    gridded.flipOne2Two(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-    gridded.flipOne2Three(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-    gridded.flipOne2Four(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-
-    fore = 11.0
-    star = 11.0
-    imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({fore},{star}).npy"))
-    gridded.flipOne2Two(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-    gridded.flipOne2Three(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-    gridded.flipOne2Four(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-
-    fore = 16.0
-    star = 16.0
-    imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({fore},{star}).npy"))
-    gridded.flipOne2Two(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-    gridded.flipOne2Three(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-    gridded.flipOne2Four(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-
-    fore = 21.0
-    star = 21.0
-    imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({fore},{star}).npy"))
-    gridded.flipOne2Two(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-    gridded.flipOne2Three(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
-    gridded.flipOne2Four(pathHeatmap, fore, star, altitude, minGSD, maxGSD, imData)
+    # for i in range(len(angVecs)):
+    #     for j in range(len(angVecs)-1):
+    #         imData = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({angVecs[i]},{angVecs[j]}).npy"))
+    #         gridded.flipOne2Two(pathHeatmap, angVecs[i], angVecs[j+1], altitude, minGSD, maxGSD, imData)
+    #         gridded.flipOne2Three(pathHeatmap, angVecs[i], angVecs[j+1], altitude, minGSD, maxGSD, imData)
+    #         gridded.flipOne2Four(pathHeatmap, angVecs[i], angVecs[j+1], altitude, minGSD, maxGSD, imData)
 
     print()
 

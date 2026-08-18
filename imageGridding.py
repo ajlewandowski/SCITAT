@@ -462,8 +462,8 @@ class imageGridding:
 
         alt = altitude * 1e3
 
-        minAng = np.deg2rad(min(angVec))
-        maxAng = np.deg2rad(max(angVec))
+        minAng = np.deg2rad(min(abs(angVec)))
+        maxAng = np.deg2rad(max(abs(angVec)))
 
         rangeVec = alt / np.cos(minAng + self.IFOVbase*0.5)
         GSDbase = self.IFOVbase * rangeVec
@@ -539,7 +539,7 @@ class imageGridding:
 
         foreNew = -fore
         starNew = -starboard
-        imDataNew = np.fliplr(imData)
+        imDataNew = np.flip(imData)
         angVecForeNew = -np.flip(angVecFore)
         angVecStarNew = -np.flip(angVecStar)
 
@@ -587,7 +587,7 @@ class imageGridding:
 
         foreNew = -fore
         starNew = starboard
-        imDataNew = np.fliplr(imData)
+        imDataNew = np.flipud(imData)
         angVecForeNew = -np.flip(angVecFore)
         angVecStarNew = angVecStar
 

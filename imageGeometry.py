@@ -4,15 +4,17 @@ This file contains the class that accounts for image geometry analysis and optim
 
 import numpy as np
 import pandas as pd
+import warnings
 from pathlib import Path
 import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter
 from scipy.ndimage import label, maximum_filter
 
 
 # This class will import system parameters and produce a resolution "heat map"
 
 class imageGeometry:
-    def __init__(self, noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude):
+    def __init__(self, noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax):
         self.norad = noradID
         self.state84 = state84
         self.sens = sens
@@ -23,6 +25,8 @@ class imageGeometry:
         self.minGSD = minGSD
         self.maxGSD = maxGSD
         self.alt = altitude
+        self.sigmaPix = sigmaPix
+        self.eMax = eMax
 
         self.wgsf = 1 / 298.257223563
         self.ae = 6378137.0
@@ -35,7 +39,8 @@ class imageGeometry:
 
     def getCostFunction(self, ims, imData, imAngles):
 
-        overlapMean, overlapSlices, overlapRad = self.getOverlapRadius(ims, imData)
+        overlapMean, overlapSlices, overlap = self.getOverlapRadius(ims, imData)
+        overlapRad = overlap["centered"]["rGeo"]
         errOverlap = 1.0 - (((ims[0].shape[0] // 2) - overlapRad) / (ims[0].shape[0] // 2))
         
         errGSD = self.getGSDError(overlapMean)
@@ -45,71 +50,197 @@ class imageGeometry:
         
         errOrthoAvg = self.getOrthogonality(ims, imData)
         
-        costMap = self.computeMVSCostMap(overlapSlices, imAngles, 0.5, 35.0)
+        costMap = self.computeMVSCostMap(overlapSlices, imAngles, self.sigmaPix, self.eMax)
         errCostMap = np.mean(costMap)
         
-        cost = (0.1*errOverlap + 0.2*errGSD + 0.1*errbhRatio + 0.1*errOrthoAvg + 0.5*errCostMap)
+        cost = (0.2*errOverlap + 0.2*errGSD + 0.2*errbhRatio + 0.2*errOrthoAvg + 0.2*errCostMap)
 
         return cost
 
-    def getOverlapRadius(self, ims, imData, nan_policy="propagate", dtype=np.float64):
+    # def getOverlapRadius(self, ims, imData, nan_policy="propagate", dtype=np.float64):
 
-        imTargs = np.zeros((len(ims),2))
-        for i, im in enumerate(ims):
-            imRow, imCol = self.getImCenterCoords(im, imData[i,:])
-            imTargs[i,:] = np.array([imRow, imCol])
+    #     imTargs = np.zeros((len(ims),2))
+    #     for i, im in enumerate(ims):
+    #         imRow, imCol = self.getImCenterCoords(im, imData[i,:])
+    #         imTargs[i,:] = np.array([imRow, imCol])
 
+    #     """
+    #     Align N images on their targets, cut the largest common window, and
+    #     average the frames pixel-by-pixel.
+
+    #     images  : sequence of N 2-D arrays
+    #     targets : (N, 2) (row, col) target positions measured from the center
+    #             pixel, i.e. (0, 0) is index (nrows//2, ncols//2)
+    #     nan_policy : "propagate" -> a NaN in any frame gives NaN in the mean
+    #                 "omit"      -> average over the valid frames only
+
+    #     Returns (mean, slices, r):
+    #         mean   : (2k+1, 2k+1) averaged cutout, target at [k, k]
+    #         stack : stacked slices of the overlapping pixels
+    #         r      : exact overlap radius in pixels (k = floor(r))
+    #     """
+    #     imgs = list(ims)
+    #     n = len(imgs)
+
+    #     t = np.atleast_2d(np.asarray(imTargs, dtype=float))
+
+    #     if len(imgs) != len(t):
+    #         raise ValueError(f"{len(imgs)} images but {len(t)} targets")
+    #     if t.shape[1] != 2:
+    #         raise ValueError("targets must have shape (N, 2) as (row, col)")
+
+    #     shapes = np.array([im.shape[:2] for im in imgs])
+    #     abs_t = shapes // 2 + t                      # absolute index of each target
+
+    #     if np.any(abs_t < 0) or np.any(abs_t > shapes - 1):
+    #         bad = np.where(np.any((abs_t < 0) | (abs_t > shapes - 1), axis=1))[0]
+    #         raise ValueError(f"target(s) outside the image: {bad.tolist()}")
+
+    #     r = float(np.min(np.concatenate([abs_t, shapes - 1 - abs_t], axis=1)))
+    #     k = int(np.floor(r))
+
+    #     ai = np.rint(abs_t).astype(int)
+    #     slices = [(slice(row - k, row + k + 1), slice(col - k, col + k + 1))
+    #             for row, col in ai]
+
+    #     stack = np.stack([im[s] for im, s in zip(imgs, slices)]).astype(dtype, copy=False)
+
+    #     if nan_policy == "omit":
+    #         valid = np.isfinite(stack)
+    #         count = valid.sum(axis=0)
+    #         with np.errstate(invalid="ignore"):
+    #             mean = np.nanmean(np.where(valid, stack, np.nan), axis=0)
+    #         mean[count == 0] = np.nan
+    #     elif nan_policy == "propagate":
+    #         mean = stack.mean(axis=0)
+    #     else:
+    #         raise ValueError("nan_policy must be 'propagate' or 'omit'")
+
+    #     return mean, stack, r
+
+
+    def getOverlapRadius(self, ims, imData, window="centered",
+                        nan_policy="propagate", centerRef="floor",
+                        dtype=np.float64):
         """
-        Align N images on their targets, cut the largest common window, and
-        average the frames pixel-by-pixel.
+        Align N images on their targets and measure the common region.
 
-        images  : sequence of N 2-D arrays
-        targets : (N, 2) (row, col) target positions measured from the center
-                pixel, i.e. (0, 0) is index (nrows//2, ncols//2)
+        ims        : sequence of N 2-D arrays (shapes may differ)
+        imData     : (N, ...) per-image data passed to self.getImCenterCoords
+        window     : "centered" -> cutout symmetric about the target
+                    "max"      -> largest common region (target off-center)
+                    which window gets averaged; both are always measured
         nan_policy : "propagate" -> a NaN in any frame gives NaN in the mean
                     "omit"      -> average over the valid frames only
+        centerRef  : "floor" -> center pixel is shape // 2
+                    "exact" -> center is (shape - 1) / 2
+                    must match the convention used by getImCenterCoords
 
-        Returns (mean, slices, r):
-            mean   : (2k+1, 2k+1) averaged cutout, target at [k, k]
-            slices : list of N (row_slice, col_slice) tuples, one per input image
-            r      : exact overlap radius in pixels (k = floor(r))
+        Returns (mean, stack, overlap):
+            mean    : (nRows, nCols) averaged cutout for the chosen window
+            stack   : (N, nRows, nCols) the aligned cutouts
+            overlap : dict with "centered" and "max" sub-dicts, each holding
+                    the window dims, slices, target index, and scalar sizes.
+                    "max" additionally holds the four directional margins.
+
+        Directional margins are in ARRAY orientation: "up" means toward lower
+        row index (the top of the array as displayed by imshow with the default
+        origin="upper"). Flip up/down if your row axis is y-up.
         """
         imgs = list(ims)
-        t = np.atleast_2d(np.asarray(imTargs, dtype=float))
+        n = len(imgs)
+        if n == 0:
+            raise ValueError("no images given")
 
-        if len(imgs) != len(t):
-            raise ValueError(f"{len(imgs)} images but {len(t)} targets")
-        if t.shape[1] != 2:
-            raise ValueError("targets must have shape (N, 2) as (row, col)")
+        # --- target offsets relative to each image's center pixel ---
+        offsets = np.empty((n, 2), dtype=float)
+        for i, im in enumerate(imgs):
+            imRow, imCol = self.getImCenterCoords(im, imData[i, :])
+            offsets[i] = (imRow, imCol)
 
         shapes = np.array([im.shape[:2] for im in imgs])
-        abs_t = shapes // 2 + t                      # absolute index of each target
 
-        if np.any(abs_t < 0) or np.any(abs_t > shapes - 1):
-            bad = np.where(np.any((abs_t < 0) | (abs_t > shapes - 1), axis=1))[0]
-            raise ValueError(f"target(s) outside the image: {bad.tolist()}")
+        if centerRef == "floor":
+            centers = shapes // 2
+        elif centerRef == "exact":
+            centers = (shapes - 1) / 2.0
+        else:
+            raise ValueError("centerRef must be 'floor' or 'exact'")
 
-        r = float(np.min(np.concatenate([abs_t, shapes - 1 - abs_t], axis=1)))
-        k = int(np.floor(r))
+        anchors = np.rint(centers + offsets).astype(int)
 
-        ai = np.rint(abs_t).astype(int)
-        slices = [(slice(row - k, row + k + 1), slice(col - k, col + k + 1))
-                for row, col in ai]
+        outside = np.any((anchors < 0) | (anchors > shapes - 1), axis=1)
+        if np.any(outside):
+            raise ValueError(f"target(s) outside the image: {np.flatnonzero(outside).tolist()}")
 
-        stack = np.stack([im[s] for im, s in zip(imgs, slices)]).astype(dtype, copy=False)
+        # --- per-axis margins around each anchor, reduced over images ---
+        before = anchors                                # (N, 2) above / left
+        after = shapes - 1 - anchors                    # (N, 2) below / right
 
-        if nan_policy == "omit":
+        mBefore = before.min(axis=0)                    # (up, left)
+        mAfter = after.min(axis=0)                      # (down, right)
+
+        # centered window: tighter side wins on each axis
+        half = np.minimum(mBefore, mAfter)
+        hRow, hCol = int(half[0]), int(half[1])
+
+        def _build(back, fwd):
+            back = np.asarray(back, dtype=int)
+            fwd = np.asarray(fwd, dtype=int)
+            dims = back + fwd + 1
+            slices = [(slice(r0 - back[0], r0 + fwd[0] + 1),
+                    slice(c0 - back[1], c0 + fwd[1] + 1)) for r0, c0 in anchors]
+            return {
+                "nRows": int(dims[0]),
+                "nCols": int(dims[1]),
+                "slices": slices,
+                "targetIndex": (int(back[0]), int(back[1])),
+                "rGeo": float(np.sqrt(back[0] * fwd[0] * back[1] * fwd[1]) ** 0.5)
+                        if False else float(np.sqrt(
+                            ((back[0] + fwd[0]) / 2.0) * ((back[1] + fwd[1]) / 2.0))),
+                "sideEq": float(np.sqrt(dims[0] * dims[1])),
+            }
+
+        centered = _build(half, half)
+        maximal = _build(mBefore, mAfter)
+
+        maximal.update({
+            "up": int(mBefore[0]),
+            "down": int(mAfter[0]),
+            "left": int(mBefore[1]),
+            "right": int(mAfter[1]),
+        })
+
+        overlap = {"centered": centered, "max": maximal}
+
+        # --- cut and average the requested window ---
+        if window not in overlap:
+            raise ValueError("window must be 'centered' or 'max'")
+        chosen = overlap[window]
+
+        if chosen["nRows"] < 2 or chosen["nCols"] < 2:
+            raise ValueError(
+                f"degenerate {window} overlap: {chosen['nRows']}x{chosen['nCols']}")
+
+        stack = np.stack([im[s] for im, s in zip(imgs, chosen["slices"])]
+                        ).astype(dtype, copy=False)
+
+        if nan_policy == "propagate":
+            mean = stack.mean(axis=0)
+        elif nan_policy == "omit":
             valid = np.isfinite(stack)
             count = valid.sum(axis=0)
-            with np.errstate(invalid="ignore"):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
                 mean = np.nanmean(np.where(valid, stack, np.nan), axis=0)
             mean[count == 0] = np.nan
-        elif nan_policy == "propagate":
-            mean = stack.mean(axis=0)
         else:
             raise ValueError("nan_policy must be 'propagate' or 'omit'")
 
-        return mean, stack, r
+        return mean, stack, overlap
+
+
+
 
     def getImCenterCoords(self, im, imData):
         """ The output coordinate is relative to the center of image, so where is target at optimal GSD relative to image center """
@@ -156,10 +287,10 @@ class imageGeometry:
         for k in range(imData.shape[0]):
             rowOff, colOff = self.getImCenterCoords(ims[k], imData[k,:])
 
-            newFore1 = np.deg2rad(imData[k,0]) - np.sign(imData[k,0])*rowOff*round(self.IFOVbase)
-            newStar1 = np.deg2rad(imData[k,1]) - np.sign(imData[k,1])*colOff*round(self.IFOVbase)
+            newFore = np.deg2rad(imData[k,0]) - np.sign(imData[k,0])*rowOff*round(self.IFOVbase)
+            newStar = np.deg2rad(imData[k,1]) - np.sign(imData[k,1])*colOff*round(self.IFOVbase)
 
-            satRelTarg = np.array([imData[k,2]*np.tan(newStar1), imData[k,2]*np.tan(newFore1), imData[k,2]])
+            satRelTarg = np.array([imData[k,2]*np.tan(newStar), imData[k,2]*np.tan(newFore), imData[k,2]])
             
             relVecs[k,:] = satRelTarg / np.linalg.norm(satRelTarg)
 
@@ -404,13 +535,17 @@ class imageGeometry:
         }
         return irow, icol, info
 
-    def plotCostMap(self, costMap, imAngles, sigmaPix, eMax, pathCost):
+    def plotCostMap(self, costMap, imAngles, sigmaPix, eMax, pathCost, cost):
 
         fig, ax = plt.subplots(figsize=(10, 8))
         im = ax.imshow(costMap, origin='lower', cmap='coolwarm', interpolation='nearest')
         cbar = fig.colorbar(im)
+        fmt = ScalarFormatter(useOffset=False, useMathText=False)
+        fmt.set_scientific(False)
+        cbar.ax.yaxis.set_major_formatter(fmt)
+
         cbar.set_label('Multi-View Stereo Cost')
-        ax.set_title(f'Cost Map for MVS with {imAngles.shape[0]} images, sigmaPix of {sigmaPix}, and eMax of {eMax}')
+        ax.set_title(f'MVS Cost Map {imAngles.shape[0]} images, sigmaPix: {sigmaPix}, eMax: {eMax}')
         per_row = 4
         items = [f"({a:+5.1f}, {b:+5.1f})" for a, b in imAngles]
         rows = [ "   ".join(items[i:i+per_row]) for i in range(0, len(items), per_row) ]
@@ -421,8 +556,34 @@ class imageGeometry:
         fig.text(0.5, 0.02, note, ha='center', va='bottom',
                 fontsize=9, family='monospace')
 
-        fileName = f'costmap_{imAngles.shape[0]}_images_{self.alt}_km.png'
+        fileName = f'costmap_{imAngles.shape[0]:02d}_images_{self.alt}_km_{cost}.png'
         fullPath = pathCost / fileName
         plt.savefig(fullPath)
-        print(f'costmap_{imAngles.shape[0]}_images_{self.alt}_km.png')
+        print(f'costmap_{imAngles.shape[0]}_images_{self.alt}_km_{cost}.png')
+
+    def plotRandomCostMap(self, costMap, imAngles, sigmaPix, eMax, pathCost, cost, randNum):
+    
+        fig, ax = plt.subplots(figsize=(10, 8))
+        im = ax.imshow(costMap, origin='lower', cmap='coolwarm', interpolation='nearest')
+        cbar = fig.colorbar(im)
+        fmt = ScalarFormatter(useOffset=False, useMathText=False)
+        fmt.set_scientific(False)
+        cbar.ax.yaxis.set_major_formatter(fmt)
+
+        cbar.set_label('Multi-View Stereo Cost')
+        ax.set_title(f'MVS Cost Map {imAngles.shape[0]} images, sigmaPix: {sigmaPix}, eMax: {eMax}')
+        per_row = 4
+        items = [f"({a:+5.1f}, {b:+5.1f})" for a, b in imAngles]
+        rows = [ "   ".join(items[i:i+per_row]) for i in range(0, len(items), per_row) ]
+        note = "Angle sets:\n" + "\n".join(rows)
+        n_lines = note.count("\n") + 1
+        line_h = 0.022                      # ~fraction of figure height per line at fontsize 9
+        fig.subplots_adjust(bottom=0.10 + n_lines * line_h)
+        fig.text(0.5, 0.02, note, ha='center', va='bottom',
+                fontsize=9, family='monospace')
+
+        fileName = f'costmap_{imAngles.shape[0]:02d}_images_{self.alt}_km_{cost}_{randNum}.png'
+        fullPath = pathCost / fileName
+        plt.savefig(fullPath)
+        print(f'costmap_{imAngles.shape[0]}_images_{self.alt}_km_{cost}_{randNum}.png')
 
