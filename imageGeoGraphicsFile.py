@@ -98,7 +98,7 @@ def runBigSymmetricSim():
 
     overlapMean, overlapSlices, overlapRad = imageGeo.getOverlapRadius(ims, imData)
     costMap = imageGeo.computeMVSCostMap(overlapSlices, imAngles, sigmaPix, eMax)
-    pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km_Symmetry")   
+    pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostResults")   
     imageGeo.plotCostMap(costMap, imAngles, sigmaPix, eMax, pathCost, cost)
     print()
 
@@ -201,6 +201,58 @@ def analyzeSymmetrySim():
     plt.savefig(fullPath)
     print('Figure saved as Off_Symmetry_Randomization' + fileName[25:30] + 'km_offnadir.png')
 
+def runThreeQuadrantSim():
+
+    for j in range(1, 26, 1):
+        rng = np.random.default_rng()
+        nImages = rng.integers(2, 30)
+        imAngles = rng.integers(-25, 26, size=(nImages,2)).astype(np.float64)
+
+        for i in range(imAngles.shape[0]):
+            if imAngles[i,0] < 0 and imAngles[i,1] < 0:
+                ind = rng.integers(0,3)
+                if ind == 0:
+                    imAngles[i,1] = -imAngles[i,1]
+                    imAngles[i,0] = -imAngles[i,0]
+                elif ind == 1:
+                    imAngles[i,1] = -imAngles[i,1]
+                else:
+                    imAngles[i,0] = -imAngles[i,0]
+
+        print()
+        print(f"This run has {nImages} images from the following angles:")
+        print(imAngles)
+        print()
+
+        ims = []
+        imData = np.zeros((imAngles.shape[0],3))
+        for k in range(imAngles.shape[0]):
+            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+            ims.append(im)
+            imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
+
+        cost = imageGeo.getCostFunction(ims, imData, imAngles)
+        print()
+        print(f"The cost for {imAngles.shape[0]} images of:")
+        print()
+        print(imAngles)
+        print()
+        print(cost)
+        print()
+
+        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km_ThreeQuad")   
+
+        imsAngs = np.array(imAngles)
+        matFileName = f'random_three_quadrant_{imAngles.shape[0]}_images_705km_angles_{j}'
+        fullMatPath = pathCost / matFileName
+        np.save(fullMatPath, imsAngs)
+
+        imsCosts = np.array(cost)
+        matFileName = f'random_three_quadrant_{imAngles.shape[0]}_images_705km_costs_{j}'   
+        fullMatPath = pathCost / matFileName
+        np.save(fullMatPath, imsCosts)
+        
+        print()
 
 
     
@@ -244,7 +296,9 @@ if __name__ == "__main__":
     
     imageGeo = imageGeometry(noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
     
-    runCostVsNumImages()
+    # runCostVsNumImages()
     # runBigSymmetricSim()
     # runRandomSymmetryTest()
-    analyzeSymmetrySim()
+    # analyzeSymmetrySim()
+
+    runThreeQuadrantSim()
