@@ -15,50 +15,69 @@ from tatc.analysis import collect_orbit_track, OrbitCoordinate, OrbitOutput
 
 def runCostVsNumImages():
 
+    # folder = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km")   
+
+    # IMG_EXT = {".png"}
+
+    # # group 1 = the two-digit index, group 2 = the long decimal number
+    # pattern = re.compile(r"costmap_(\d{2})_images_705_km_(\d+\.\d+)")
+
+    # ids, values = [], []
+    # for f in sorted(folder.iterdir()):
+    #     if not f.is_file() or f.suffix.lower() not in IMG_EXT:
+    #         continue
+    #     m = pattern.search(f.name)
+    #     if m is None:
+    #         print(f"skipped (no match): {f.name}")
+    #         continue
+    #     ids.append(int(m.group(1)))
+    #     values.append(float(m.group(2)))
+
+    # ids = np.array(ids, dtype=int)
+    # values = np.array(values, dtype=float)
+
+    # print(f"{len(ids)} graphics found")
+
+    # # per-ID means
+    # unique_ids = np.unique(ids)
+    # mean_values = np.array([values[ids == i].mean() for i in unique_ids])
+    # counts = np.array([(ids == i).sum() for i in unique_ids])
+
     folder = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km")   
+    
+    data = []
+    imNum = []
+    for j in range(1, 251, 1):
+        fileName = f"random_full_705km_costs_{j}.npy"
+        path = folder / fileName
+        dataMat = np.load(path)
+        data.append(dataMat)
 
-    IMG_EXT = {".png"}
+        fileName = f"random_full_705km_angles_{j}.npy"
+        path = folder / fileName
+        dataMat = np.load(path)
+        row, col = dataMat.shape
+        imNum.append(row)
 
-    # group 1 = the two-digit index, group 2 = the long decimal number
-    pattern = re.compile(r"costmap_(\d{2})_images_705_km_(\d+\.\d+)")
+    costs = np.concatenate([np.atleast_1d(d).ravel() for d in data])
+    nums  = np.concatenate([np.full(np.atleast_1d(d).size, n) for d, n in zip(data, imNum)])
 
-    ids, values = [], []
-    for f in sorted(folder.iterdir()):
-        if not f.is_file() or f.suffix.lower() not in IMG_EXT:
-            continue
-        m = pattern.search(f.name)
-        if m is None:
-            print(f"skipped (no match): {f.name}")
-            continue
-        ids.append(int(m.group(1)))
-        values.append(float(m.group(2)))
+    # Group by number of images and take the mean of each group
+    uniq  = np.unique(nums)
+    means = np.array([costs[nums == n].mean() for n in uniq])
 
-    ids = np.array(ids, dtype=int)
-    values = np.array(values, dtype=float)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.scatter(nums, costs, color="tab:blue", alpha=0.6, label="Individual Costs")
+    ax.plot(uniq, means, "o-", color="crimson", lw=2, markersize=8,
+            label="Mean per Number of Images")
 
-    print(f"{len(ids)} graphics found")
-
-    # per-ID means
-    unique_ids = np.unique(ids)
-    mean_values = np.array([values[ids == i].mean() for i in unique_ids])
-    counts = np.array([(ids == i).sum() for i in unique_ids])
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    # raw points (no connecting line — several values can share one ID)
-    ax.scatter(ids, values, s=25, alpha=0.5, label="Individual Costs")
-
-    # the average on top
-    ax.plot(unique_ids, mean_values, "o-", color="crimson",
-            linewidth=2, markersize=7, zorder=3, label="Mean per Number of Images")
-
+    ax.set_xticks(uniq)
     ax.set_xlabel("Number of Images")
     ax.set_ylabel("Cost")
     ax.set_title("Cost vs. Number of Images in MVS Set")
-    ax.set_xticks(unique_ids)
-    ax.grid(True, alpha=0.3)
+    ax.grid(alpha=0.3)
     ax.legend()
-    fig.tight_layout()
+    plt.tight_layout()
 
     # Save the graphic and data file
     fileName = 'cost_versus_numberofimages_graphic.png'
@@ -174,6 +193,10 @@ def analyzeSymmetrySim():
     angle = data[:,1]
     costs = data[:,0]
 
+    mask = costs < 0.4
+    costs = costs[mask]
+    angle = angle[mask]
+
     keys = np.unique(angle)
     means = np.array([costs[angle == k].mean() for k in keys])
     stds = np.array([costs[angle == k].std(ddof=1) for k in keys])
@@ -201,11 +224,51 @@ def analyzeSymmetrySim():
     plt.savefig(fullPath)
     print('Figure saved as Off_Symmetry_Randomization' + fileName[25:30] + 'km_offnadir.png')
 
+def runFullQuadrantSim():
+
+    for j in range(51):
+        rng = np.random.default_rng()
+        nImages = 5
+        imAngles = rng.integers(-25, 26, size=(nImages,2)).astype(np.float64)
+
+        print()
+        print(f"This run has {nImages} images from the following angles:")
+        print(imAngles)
+        print()
+
+
+        ims = []
+        imData = np.zeros((imAngles.shape[0],3))
+        for k in range(imAngles.shape[0]):
+            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+            ims.append(im)
+            imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
+
+        cost = imageGeo.getCostFunction(ims, imData, imAngles)
+        print()
+        print(f"The cost for {imAngles.shape[0]} images of:")
+        print()
+        print(cost)
+        print()
+
+        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km")   
+
+        imsAngs = np.array(imAngles)
+        matFileName = f'random_full_705km_angles_{j+1}'
+        fullMatPath = pathCost / matFileName
+        np.save(fullMatPath, imsAngs)
+        
+        imsCosts = np.array(cost)
+        matFileName = f'random_full_705km_costs_{j+1}'   
+        fullMatPath = pathCost / matFileName
+        np.save(fullMatPath, imsCosts)
+
+
 def runThreeQuadrantSim():
 
-    for j in range(1, 26, 1):
+    for j in range(1, 51, 1):
         rng = np.random.default_rng()
-        nImages = rng.integers(2, 30)
+        nImages = 5
         imAngles = rng.integers(-25, 26, size=(nImages,2)).astype(np.float64)
 
         for i in range(imAngles.shape[0]):
@@ -235,27 +298,178 @@ def runThreeQuadrantSim():
         print()
         print(f"The cost for {imAngles.shape[0]} images of:")
         print()
-        print(imAngles)
-        print()
         print(cost)
         print()
 
         pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km_ThreeQuad")   
 
         imsAngs = np.array(imAngles)
-        matFileName = f'random_three_quadrant_{imAngles.shape[0]}_images_705km_angles_{j}'
+        matFileName = f'random_three_quadrant_images_705km_angles_{j}'
         fullMatPath = pathCost / matFileName
         np.save(fullMatPath, imsAngs)
 
         imsCosts = np.array(cost)
-        matFileName = f'random_three_quadrant_{imAngles.shape[0]}_images_705km_costs_{j}'   
+        matFileName = f'random_three_quadrant_images_705km_costs_{j}'   
         fullMatPath = pathCost / matFileName
         np.save(fullMatPath, imsCosts)
         
         print()
 
+def runTwoQuadrantSim():
+    for j in range(1, 51, 1):
+        rng = np.random.default_rng()
+        nImages = 5
+        imAngles = rng.integers(-25, 26, size=(nImages,2)).astype(np.float64)
 
-    
+        for i in range(imAngles.shape[0]):
+            if imAngles[i,0] < 0 and imAngles[i,1] < 0:
+                ind = rng.integers(0,2)
+                if ind == 0:
+                    imAngles[i,1] = -imAngles[i,1]
+                    imAngles[i,0] = -imAngles[i,0]
+                elif ind == 1:
+                    imAngles[i,0] = -imAngles[i,0]
+
+
+            if imAngles[i,0] < 0 and imAngles[i,1] > 0:
+                ind = rng.integers(0,2)
+                if ind == 0:
+                    imAngles[i,0] = -imAngles[i,0]
+                elif ind == 1:
+                    imAngles[i,1] = -imAngles[i,1]
+                    imAngles[i,0] = -imAngles[i,0]
+
+        print()
+        print(f"This run has {nImages} images from the following angles:")
+        print(imAngles)
+        print()
+
+        ims = []
+        imData = np.zeros((imAngles.shape[0],3))
+        for k in range(imAngles.shape[0]):
+            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+            ims.append(im)
+            imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
+
+        cost = imageGeo.getCostFunction(ims, imData, imAngles)
+        print()
+        print(f"The cost for {imAngles.shape[0]} images of:")
+        print()
+        print(cost)
+        print()
+
+        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km_TwoQuad")   
+
+        imsAngs = np.array(imAngles)
+        matFileName = f'random_two_quadrant_705km_angles_{j}'
+        fullMatPath = pathCost / matFileName
+        np.save(fullMatPath, imsAngs)
+
+        imsCosts = np.array(cost)
+        matFileName = f'random_two_quadrant_705km_costs_{j}'   
+        fullMatPath = pathCost / matFileName
+        np.save(fullMatPath, imsCosts)
+        
+        print()
+
+def runOneQuadrantSim():
+    for j in range(1, 51, 1):
+        rng = np.random.default_rng()
+        nImages = 5
+        imAngles = rng.integers(0, 26, size=(nImages,2)).astype(np.float64)
+
+        print()
+        print(f"This run has {nImages} images from the following angles:")
+        print(imAngles)
+        print()
+
+        ims = []
+        imData = np.zeros((imAngles.shape[0],3))
+        for k in range(imAngles.shape[0]):
+            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+            ims.append(im)
+            imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
+
+        cost = imageGeo.getCostFunction(ims, imData, imAngles)
+        print()
+        print(f"The cost for {imAngles.shape[0]} images of:")
+        print()
+        print(cost)
+        print()
+
+        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km_OneQuad")   
+
+        imsAngs = np.array(imAngles)
+        matFileName = f'random_one_quadrant_705km_angles_{j}'
+        fullMatPath = pathCost / matFileName
+        np.save(fullMatPath, imsAngs)
+
+        imsCosts = np.array(cost)
+        matFileName = f'random_one_quadrant_705km_costs_{j}'   
+        fullMatPath = pathCost / matFileName
+        np.save(fullMatPath, imsCosts)
+        
+        print()
+
+def analyzeQuadrantSim():
+    pathFull = Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km")
+    fullCost = []
+    for j in range(1, 51, 1):
+        for f in pathFull.glob(f"*costs_{j}.*"):
+            data = np.load(f)
+            fullCost.append(data)
+    full = np.array(fullCost)
+    fullMean = np.mean(full)
+
+    pathQuad1 = Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km_OneQuad")
+    quad1cost = []
+    for j in range(1, 51, 1):
+        for f in pathQuad1.glob(f"*costs_{j}.*"):
+            data = np.load(f)
+            quad1cost.append(data)
+    quad1 = np.array(quad1cost)
+    quad1Mean = np.mean(quad1)
+
+    pathQuad2 = Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km_TwoQuad")
+    quad2cost = []
+    for j in range(1, 51, 1):
+        for f in pathQuad2.glob(f"*costs_{j}.*"):
+            data = np.load(f)
+            quad2cost.append(data)
+    quad2 = np.array(quad2cost)
+    quad2Mean = np.mean(quad2)
+
+    pathQuad3 = Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km_ThreeQuad")
+    quad3cost = []
+    for j in range(1, 51, 1):
+        for f in pathQuad3.glob(f"*costs_{j}.*"):
+            data = np.load(f)
+            quad3cost.append(data)
+    quad3 = np.array(quad3cost)
+    quad3Mean = np.mean(quad3)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.scatter(np.ones(len(full)), full, s=25, alpha=0.5, label="All-Quadrant")
+    ax.scatter(2.0*np.ones(len(quad3)), quad3, s=25, alpha=0.5, label="Three-Quadrant")
+    ax.scatter(3.0*np.ones(len(quad2)), quad2, s=25, alpha=0.5, label="Two-Quadrant")
+    ax.scatter(4.0*np.ones(len(quad1)), quad1, s=25, alpha=0.5, label="One-Quadrant")
+
+    ax.plot(np.array([1.0, 2.0, 3.0, 4.0]), np.array([fullMean, quad3Mean, quad2Mean, quad1Mean]), "o-", color="crimson",
+            linewidth=2, markersize=7, zorder=3, label="Mean")
+    ax.set_xlabel("Image Quadrants")
+    ax.set_ylabel("Cost")
+    ax.set_title("Cost vs. Quadrants Covered in image")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+
+    # Save the graphic and data file
+    fileName = 'cost_quadrant_simulation_graphic.png'
+    pathNew = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostResults")   
+    fullPath = pathNew / fileName
+    plt.savefig(fullPath)
+    print('Figure saved as cost_quadrant_simulation_graphic.png')
+
 if __name__ == "__main__":
     print()
     print("###################################################################################################")
@@ -295,10 +509,14 @@ if __name__ == "__main__":
     eMax = 25.0
     
     imageGeo = imageGeometry(noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
+
+    # runFullQuadrantSim()
+    # runThreeQuadrantSim()
+    # runTwoQuadrantSim()
+    # runOneQuadrantSim()
+    # analyzeQuadrantSim()
     
     # runCostVsNumImages()
     # runBigSymmetricSim()
     # runRandomSymmetryTest()
     # analyzeSymmetrySim()
-
-    runThreeQuadrantSim()

@@ -52,7 +52,7 @@ def runTest():
  
     imageGeo = imageGeometry(noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
 
-    for k in range(250):
+    for j in range(90,251,1):
         rng = np.random.default_rng()
         nImages = rng.integers(2, 30)
         imAngles = rng.integers(-25, 26, size=(nImages,2)).astype(np.float64)
@@ -79,18 +79,17 @@ def runTest():
         print(cost)
         print()
 
-        overlapMean, overlapSlices, overlapRad = imageGeo.getOverlapRadius(ims, imData)
-        print("Overlap Radius")
-        print(overlapRad["centered"]["rGeo"])
-
-        costMap = imageGeo.computeMVSCostMap(overlapSlices, imAngles, sigmaPix, eMax)
-        print()
-        print("MVS cost map avg value")
-        print(np.mean(costMap))
-
         pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km")   
-        imageGeo.plotCostMap(costMap, imAngles, sigmaPix, eMax, pathCost, cost)
-        print()
+
+        imsAngs = np.array(imAngles)
+        matFileName = f'random_full_705km_angles_{j}'
+        fullMatPath = pathCost / matFileName
+        np.save(fullMatPath, imsAngs)
+        
+        imsCosts = np.array(cost)
+        matFileName = f'random_full_705km_costs_{j}'   
+        fullMatPath = pathCost / matFileName
+        np.save(fullMatPath, imsCosts)
 
 
 

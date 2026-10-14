@@ -41,83 +41,25 @@ class imageGeometry:
 
         overlapMean, overlapSlices, overlap = self.getOverlapRadius(ims, imData)
         overlapRad = overlap["centered"]["rGeo"]
-        errOverlap = 1.0 - (((ims[0].shape[0] // 2) - overlapRad) / (ims[0].shape[0] // 2))
+        errOverlap = (((ims[0].shape[0] // 2) - overlapRad) / (ims[0].shape[0] // 2))
+        # errOverlap = 0.25
         
         errGSD = self.getGSDError(overlapMean)
+        # errGSD = 0.25
         
         bhRatio = self.getBHRatio(imData)
-        errbhRatio = 1.0 - (abs(self.targetBH - bhRatio) / self.targetBH)
+        errbhRatio = (abs(self.targetBH - bhRatio) / self.targetBH)
         
-        errOrthoAvg = self.getOrthogonality(ims, imData)
+        errCov = 1.0 - self.getCoverage(ims, imData)
+        # errCov = 0.25
         
         costMap = self.computeMVSCostMap(overlapSlices, imAngles, self.sigmaPix, self.eMax)
         errCostMap = np.mean(costMap)
+        # errCostMap = 0.25
         
-        cost = (0.2*errOverlap + 0.2*errGSD + 0.2*errbhRatio + 0.2*errOrthoAvg + 0.2*errCostMap)
+        cost = (0.2*errOverlap + 0.2*errGSD + 0.2*errbhRatio + 0.2*errCov + 0.2*errCostMap)
 
         return cost
-
-    # def getOverlapRadius(self, ims, imData, nan_policy="propagate", dtype=np.float64):
-
-    #     imTargs = np.zeros((len(ims),2))
-    #     for i, im in enumerate(ims):
-    #         imRow, imCol = self.getImCenterCoords(im, imData[i,:])
-    #         imTargs[i,:] = np.array([imRow, imCol])
-
-    #     """
-    #     Align N images on their targets, cut the largest common window, and
-    #     average the frames pixel-by-pixel.
-
-    #     images  : sequence of N 2-D arrays
-    #     targets : (N, 2) (row, col) target positions measured from the center
-    #             pixel, i.e. (0, 0) is index (nrows//2, ncols//2)
-    #     nan_policy : "propagate" -> a NaN in any frame gives NaN in the mean
-    #                 "omit"      -> average over the valid frames only
-
-    #     Returns (mean, slices, r):
-    #         mean   : (2k+1, 2k+1) averaged cutout, target at [k, k]
-    #         stack : stacked slices of the overlapping pixels
-    #         r      : exact overlap radius in pixels (k = floor(r))
-    #     """
-    #     imgs = list(ims)
-    #     n = len(imgs)
-
-    #     t = np.atleast_2d(np.asarray(imTargs, dtype=float))
-
-    #     if len(imgs) != len(t):
-    #         raise ValueError(f"{len(imgs)} images but {len(t)} targets")
-    #     if t.shape[1] != 2:
-    #         raise ValueError("targets must have shape (N, 2) as (row, col)")
-
-    #     shapes = np.array([im.shape[:2] for im in imgs])
-    #     abs_t = shapes // 2 + t                      # absolute index of each target
-
-    #     if np.any(abs_t < 0) or np.any(abs_t > shapes - 1):
-    #         bad = np.where(np.any((abs_t < 0) | (abs_t > shapes - 1), axis=1))[0]
-    #         raise ValueError(f"target(s) outside the image: {bad.tolist()}")
-
-    #     r = float(np.min(np.concatenate([abs_t, shapes - 1 - abs_t], axis=1)))
-    #     k = int(np.floor(r))
-
-    #     ai = np.rint(abs_t).astype(int)
-    #     slices = [(slice(row - k, row + k + 1), slice(col - k, col + k + 1))
-    #             for row, col in ai]
-
-    #     stack = np.stack([im[s] for im, s in zip(imgs, slices)]).astype(dtype, copy=False)
-
-    #     if nan_policy == "omit":
-    #         valid = np.isfinite(stack)
-    #         count = valid.sum(axis=0)
-    #         with np.errstate(invalid="ignore"):
-    #             mean = np.nanmean(np.where(valid, stack, np.nan), axis=0)
-    #         mean[count == 0] = np.nan
-    #     elif nan_policy == "propagate":
-    #         mean = stack.mean(axis=0)
-    #     else:
-    #         raise ValueError("nan_policy must be 'propagate' or 'omit'")
-
-    #     return mean, stack, r
-
 
     def getOverlapRadius(self, ims, imData, window="centered",
                         nan_policy="propagate", centerRef="floor",
@@ -239,9 +181,6 @@ class imageGeometry:
 
         return mean, stack, overlap
 
-
-
-
     def getImCenterCoords(self, im, imData):
         """ The output coordinate is relative to the center of image, so where is target at optimal GSD relative to image center """
 
@@ -281,28 +220,47 @@ class imageGeometry:
 
         return BHRatio
 
-    def getOrthogonality(self, ims, imData):
+    def getCoverage(self, ims, imData):
 
-        relVecs = np.zeros((imData.shape[0],3))
-        for k in range(imData.shape[0]):
-            rowOff, colOff = self.getImCenterCoords(ims[k], imData[k,:])
+        fov = self.sens[0]
+        halfFov = np.degrees(fov) / 2
 
-            newFore = np.deg2rad(imData[k,0]) - np.sign(imData[k,0])*rowOff*round(self.IFOVbase)
-            newStar = np.deg2rad(imData[k,1]) - np.sign(imData[k,1])*colOff*round(self.IFOVbase)
+        dataIm = imData[~np.all(imData[:, 0:2] == 0.0, axis=1)]
 
-            satRelTarg = np.array([imData[k,2]*np.tan(newStar), imData[k,2]*np.tan(newFore), imData[k,2]])
-            
-            relVecs[k,:] = satRelTarg / np.linalg.norm(satRelTarg)
+        imSpan = np.zeros((dataIm.shape[0],2))
+        for k in range(dataIm.shape[0]):
+            foreAng = np.radians(abs(dataIm[k,0]))
+            starAng = np.radians(abs(dataIm[k,1]))
 
-        dotProds = []
-        for i in range(imData.shape[0]):
-            for j in range(i+1, imData.shape[0]):
-                dotTemp = np.dot(relVecs[i,:], relVecs[j,:])
-                dotProds.append(dotTemp)
-        
-        dotProdAvg = np.mean(dotProds)
+            signFore = np.sign(dataIm[k,0])
+            signStar = np.sign(dataIm[k,1])
 
-        return dotProdAvg
+            ang = np.arctan2(np.tan(-signFore * foreAng), np.tan(-signStar * starAng))
+            ang = np.degrees(ang) % 360
+
+            imSpanEnd = (ang + (halfFov)) % 360
+            imSpanStart = (ang - (halfFov)) % 360
+
+            imSpan[k,:] = np.array([imSpanStart, imSpanEnd])
+
+        segs = []
+        for s, e in np.asarray(imSpan, dtype=float) % 360:
+            if e > s:
+                segs.append((s, e))
+            else:                       # arc wraps past 0
+                segs.append((s, 360))
+                segs.append((0.0, e))
+        segs.sort()
+        covered, cur_s, cur_e = 0.0, *segs[0]
+        for s, e in segs[1:]:
+            if s > cur_e:               # gap between merged blocks
+                covered += cur_e - cur_s
+                cur_s, cur_e = s, e
+            else:
+                cur_e = max(cur_e, e)
+        covered += cur_e - cur_s
+
+        return covered / 360
 
     def getGSDError(self, overlapMean):
 
