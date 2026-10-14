@@ -42,20 +42,16 @@ class imageGeometry:
         overlapMean, overlapSlices, overlap = self.getOverlapRadius(ims, imData)
         overlapRad = overlap["centered"]["rGeo"]
         errOverlap = (((ims[0].shape[0] // 2) - overlapRad) / (ims[0].shape[0] // 2))
-        # errOverlap = 0.25
-        
+
         errGSD = self.getGSDError(overlapMean)
-        # errGSD = 0.25
         
         bhRatio = self.getBHRatio(imData)
         errbhRatio = (abs(self.targetBH - bhRatio) / self.targetBH)
         
         errCov = 1.0 - self.getCoverage(ims, imData)
-        # errCov = 0.25
         
         costMap = self.computeMVSCostMap(overlapSlices, imAngles, self.sigmaPix, self.eMax)
         errCostMap = np.mean(costMap)
-        # errCostMap = 0.25
         
         cost = (0.2*errOverlap + 0.2*errGSD + 0.2*errbhRatio + 0.2*errCov + 0.2*errCostMap)
 

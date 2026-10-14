@@ -1,4 +1,7 @@
 # This file is going to create graphics about the trends in the cost map/image geometry study
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 import numpy as np

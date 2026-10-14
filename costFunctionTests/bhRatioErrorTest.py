@@ -1,4 +1,7 @@
 """ This file will test and ensure the GSD component of the cost function is working correctly """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 from imageGeometry import imageGeometry
@@ -97,9 +100,6 @@ def analyzeBHTest():
     pathNew = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostResults")   
     fullPath = pathNew / fileName
     plt.savefig(fullPath)
-
-    
-
 
 if __name__ == "__main__":
     runTest()

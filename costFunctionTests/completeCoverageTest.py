@@ -1,4 +1,7 @@
-""" This file will test and ensure the overlap component of the cost function is working correctly """
+""" This file will test and ensure the orthogonality component of the cost function is working correctly """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 from imageGeometry import imageGeometry
@@ -27,6 +30,7 @@ def runTest():
     print()
 
     target = np.array([30.30617, -97.88121])
+    angs = np.array([2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0])
 
     sens = np.array([np.deg2rad(15.0), 0.886, 6196, 30, 185000, 705000])    
     oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
@@ -37,7 +41,7 @@ def runTest():
     stateECEF = collect_orbit_track(L9, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF) 
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target)
 
-    startAng = 1.0
+    startAng = 0.0
     stepAng = 1.0
     stopAng = 25.0
     altitude = 705
@@ -48,58 +52,31 @@ def runTest():
     eMax = 25.0
     imageGeo = imageGeometry(noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
 
-    for k in range(len(angVec)):
-        ang = angVec[k]
-        imAngles = np.array([[0.0,0.0], [ang,ang], [ang,-ang], [-ang,ang], [-ang,-ang]])
+    imAngles = np.array([[0.0, 0.0], [10.0,0.0], [10.0,1.0], [10.0,2.0], [10.0,-1.0], [10.0,-2.0]])
 
-        ims = []
-        imData = np.zeros((imAngles.shape[0],3))
-        for j in range(imAngles.shape[0]):
-            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[j,0]},{imAngles[j,1]}).npy"))
-            ims.append(im)
-            imData[j,:] = np.array([imAngles[j,0], imAngles[j,1], 705])
+    imAngles = np.array([[-25.0,-25.0],[-25.0,-12.5],[-25.0,0.0],[-25.0,12.5],[-25.0,25.0],
+                         [-12.5,-25.0],[-12.5,-12.5],[-12.5,0.0],[-12.5,12.5],[-12.5,25.0],
+                         [0.0,-25.0],[0.0,-12.5],[0.0,0.0],[0.0,12.5],[0.0,25.0],
+                         [12.5,-25.0],[12.5,-12.5],[12.5,0.0],[12.5,12.5],[12.5,25.0],
+                         [25.0,-25.0],[25.0,-12.5],[25.0,0.0],[25.0,12.5],[25.0,25.0],])
+    
 
-        cost = imageGeo.getCostFunction(ims, imData, imAngles)
+    ims = []
+    imData = np.zeros((imAngles.shape[0],3))
+    for j in range(imAngles.shape[0]):
+        # im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[j,0]},{imAngles[j,1]}).npy"))
+        # ims.append(im)
+        imData[j,:] = np.array([imAngles[j,0], imAngles[j,1], 705])
 
-        imsCosts = np.array(cost)
-        matFileName = f'overlap_error_simulation_705km_costs_{k+1}'
-        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_Overlap_Test")   
-        fullMatPath = pathCost / matFileName
-        np.save(fullMatPath, imsCosts)
+    cov, spans = imageGeo.getCoverage(ims, imData)
+    print(cov)
+    print(spans)
+
+        
 
 def analyzeOverlapTest():
-    startAng = 12.0
-    stepAng = 1.0
-    stopAng = 25.0
-    altitude = 705
-    
-    angVec = np.arange(startAng, stopAng + stepAng, stepAng)
-
-    path = Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_Overlap_Test")
-    costs = []
-
-    for k in range(len(angVec)):
-        matFileName = f'overlap_error_simulation_705km_costs_{k+12}.npy'
-        fullMatPath = path / matFileName
-        data = np.load(fullMatPath)
-        costs.append(data)
-    costs = np.array(costs)
-    
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(angVec, costs, "o-", color="crimson", linewidth=2, markersize=7, zorder=3)
-    ax.set_xlabel("Angles for the overlap set")
-    ax.set_ylabel("Costs")
-    ax.set_title("Cost vs. Decreasing Overlap Pct")
-    ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-
-    # Save the graphic and data file
-    fileName = 'cost_changing_overlap_simulation_graphic.png'
-    pathNew = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostResults")   
-    fullPath = pathNew / fileName
-    plt.savefig(fullPath)
-
+    a = 1
 
 if __name__ == "__main__":
-    # runTest()
-    analyzeOverlapTest()
+    runTest()
+    # analyzeOverlapTest()

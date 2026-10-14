@@ -1,6 +1,10 @@
 """
 This file tests the flat-earth assumption versus the spherical earth assumption
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 
 import numpy as np
 from pathlib import Path

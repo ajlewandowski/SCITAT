@@ -1,6 +1,9 @@
 """
-Gridding and resolution heat map test file
+Gridding and resolution heat map test file for changing altitudes in the cost trials
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 from pathlib import Path
