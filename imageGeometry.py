@@ -262,6 +262,7 @@ class imageGeometry:
 
         meanGSD = np.mean(overlapMean)
 
+        # Max GSD and Min GSD are calculated from nadir and the max look angle based off altitude
         errGSD = (meanGSD - self.minGSD) / (self.maxGSD - self.minGSD)
 
         return errGSD
