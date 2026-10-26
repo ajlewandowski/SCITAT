@@ -1,5 +1,6 @@
-.venv/
-__pycache__/
+*.pngvenv/
 *.pyc
+__pycache__/
 tatc/resources/de421.bsp
-*.png
+.venv/
+venv/
