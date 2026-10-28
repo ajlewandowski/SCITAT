@@ -18,6 +18,7 @@ from tatc.analysis import collect_orbit_track, OrbitCoordinate, OrbitOutput
 wgsSMA = 6378137.0
 wgsf = 1 / 298.257223563
 ae = 6378137
+aeKM = 6378.137
 
 def runTest():
     print()
@@ -47,36 +48,39 @@ def runTest():
     state84 = collect_orbit_track(L9, times, coordinates = OrbitCoordinate.WGS84, sat_sunlit = True, solar_altaz = True, solar_beta = True)
     stateECEF = collect_orbit_track(L9, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
 
-    #### Last image generated was (32, 9)
-    angVecsNeg = np.arange(-40, 1, 1)
+    #### Finding the maximum satellite look angle given the altitude, and studying 75% of it
+    maxLook = np.arcsin(aeKM / (aeKM + alt))*(180/np.pi)
+    pctMaxLook = round(0.75*maxLook)
+    print(f"The max look angle for altitude {alt} km: {pctMaxLook}°")
+
+    angVecsPos = np.arange(0, pctMaxLook + 1, 1)
+    angVecsNeg = -angVecsPos
+
     altitude = alt
 
     # print(f"Producing Ground Sampling Distance (GSD) Heatmaps from {startAng}° to {stopAng}° in steps of {stepAng}°.")
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target)
     minGSD, maxGSD = gridded.getColorbarMinMax(angVecsNeg, altitude)
-
-    angVecsPos = np.arange(0, 41, 1)
-    altitude = alt
     
     pathHeatmap = Path(f"/exports/nfs_share/Users/al62352/ResolutionHeatmaps/LS9_705km")
 
-    for i in range(30,len(angVecsPos),1):
-        for j in range(len(angVecsPos)):
-            fig = gridded.getGSDArray(altitude, angVecsPos[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
-            plt.close()
+    # for i in range(len(angVecsPos)):
+    #     for j in range(len(angVecsPos)):
+    #         fig = gridded.getGSDArray(altitude, angVecsPos[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
+    #         plt.close()
 
-    for i in range(len(angVecsPos)):
-        for j in range(len(angVecsPos)):
-            fig = gridded.getGSDArray(altitude, angVecsNeg[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
-            plt.close()
+    # for i in range(len(angVecsNeg)):
+    #     for j in range(len(angVecsPos)):
+    #         fig = gridded.getGSDArray(altitude, angVecsNeg[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
+    #         plt.close()
 
-    for i in range(len(angVecsPos)):
-        for j in range(len(angVecsPos)):
+    for i in range(15, len(angVecsPos), 1):
+        for j in range(len(angVecsNeg)):
             fig = gridded.getGSDArray(altitude, angVecsPos[i], angVecsNeg[j], minGSD, maxGSD, True, True, pathHeatmap)
             plt.close()
 
-    for i in range(len(angVecsPos)):
-        for j in range(len(angVecsPos)):
+    for i in range(len(angVecsNeg)):
+        for j in range(len(angVecsNeg)):
             fig = gridded.getGSDArray(altitude, angVecsNeg[i], angVecsNeg[j], minGSD, maxGSD, True, True, pathHeatmap)
             plt.close()
 
