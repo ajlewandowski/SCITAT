@@ -74,7 +74,7 @@ def runTest():
     #         fig = gridded.getGSDArray(altitude, angVecsNeg[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
     #         plt.close()
 
-    for i in range(15, len(angVecsPos), 1):
+    for i in range(13, len(angVecsPos), 1):
         for j in range(len(angVecsNeg)):
             fig = gridded.getGSDArray(altitude, angVecsPos[i], angVecsNeg[j], minGSD, maxGSD, True, True, pathHeatmap)
             plt.close()
