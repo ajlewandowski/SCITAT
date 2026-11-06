@@ -62,19 +62,19 @@ def runTest():
     gridded = imageGridding("49260", state84, stateECEF, times, sens, target)
     minGSD, maxGSD = gridded.getColorbarMinMax(angVecsNeg, altitude)
     
-    pathHeatmap = Path(f"/exports/nfs_share/Users/al62352/ResolutionHeatmaps/LS9_705km")
+    pathHeatmap = Path(f"/exports/nfs_share/Users/al62352/ResolutionHeatmaps/PleadisNeo/PN_620km")
 
-    # for i in range(len(angVecsPos)):
-    #     for j in range(len(angVecsPos)):
-    #         fig = gridded.getGSDArray(altitude, angVecsPos[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
-    #         plt.close()
+    for i in range(len(angVecsPos)):
+        for j in range(len(angVecsPos)):
+            fig = gridded.getGSDArray(altitude, angVecsPos[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
+            plt.close()
 
-    # for i in range(len(angVecsNeg)):
-    #     for j in range(len(angVecsPos)):
-    #         fig = gridded.getGSDArray(altitude, angVecsNeg[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
-    #         plt.close()
+    for i in range(len(angVecsNeg)):
+        for j in range(len(angVecsPos)):
+            fig = gridded.getGSDArray(altitude, angVecsNeg[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
+            plt.close()
 
-    for i in range(13, len(angVecsPos), 1):
+    for i in range(len(angVecsPos)):
         for j in range(len(angVecsNeg)):
             fig = gridded.getGSDArray(altitude, angVecsPos[i], angVecsNeg[j], minGSD, maxGSD, True, True, pathHeatmap)
             plt.close()

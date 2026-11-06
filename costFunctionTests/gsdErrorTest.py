@@ -64,7 +64,7 @@ def runTest():
         ims = []
         imData = np.zeros((imAngles.shape[0],3))
         for j in range(imAngles.shape[0]):
-            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_{alts[k]}km/GSDarray_matrix_{alts[k]}_km_offnadir_({imAngles[j,0]},{imAngles[j,1]}).npy"))
+            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_{alts[k]}km/GSDarray_matrix_{alts[k]}_km_offnadir_({imAngles[j,0]},{imAngles[j,1]}).npy"))
             ims.append(im)
             imData[j,:] = np.array([imAngles[j,0], imAngles[j,1], altitude])
 
@@ -72,7 +72,7 @@ def runTest():
 
         imsCosts = np.array(cost)
         matFileName = f'gsd_error_simulation_{alts[k]}km_costs'
-        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_Alts_GSD")   
+        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_Alts_GSD")   
         fullMatPath = pathCost / matFileName
         np.save(fullMatPath, imsCosts)
 
@@ -82,7 +82,7 @@ def analyzeGSDTest():
     swath = alts*1e3*np.tan(np.deg2rad(15.0))
     gsds = swath/6196
 
-    path = Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_Alts_GSD")
+    path = Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_Alts_GSD")
     costs = []
 
     for k in range(len(alts)):
@@ -102,7 +102,7 @@ def analyzeGSDTest():
 
     # Save the graphic and data file
     fileName = 'cost_changing_meanGSD_simulation_graphic.png'
-    pathNew = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostResults")   
+    pathNew = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_CostResults")   
     fullPath = pathNew / fileName
     plt.savefig(fullPath)
 

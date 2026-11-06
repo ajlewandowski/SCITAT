@@ -63,11 +63,11 @@ def computeMVSCostMap(gsdMats, offNadAngles, sigmaPix, eMax):
 if __name__ == "__main__":
     # Generate 10 mock GSD matrices (1000x1000 pixels each)
     # Using random GSDs between 0.3m and 0.6m to simulate different satellite passes
-    data1 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_(3.0,15.0).npy"))
-    data2 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_(0.0,15.0).npy"))
-    data3 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_(0.0,0.0).npy"))
-    data4 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_(1.0,20.0).npy"))
-    data5 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_(2.0,25.0).npy"))
+    data1 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_(3.0,15.0).npy"))
+    data2 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_(0.0,15.0).npy"))
+    data3 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_(0.0,0.0).npy"))
+    data4 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_(1.0,20.0).npy"))
+    data5 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_(2.0,25.0).npy"))
 
     dataMats = [data1, data2, data3, data4, data5]
     

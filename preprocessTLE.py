@@ -17,8 +17,8 @@ def preprocess_tle_file(input_file_path, output_file_path, norad_id):
 
 # Example usage
 if __name__ == "__main__":
-    norad_id = 39084  # Example NORAD ID for L9
-    input_file_path = Path(r"D:\Users\al62352\SpaceTrackTLE\data\exports\tle2025.txt")  # Path to the full TLE file
+    norad_id = 49070  # Example NORAD ID for L9
+    input_file_path = Path(r"/exports/nfs_share/Users/al62352/SpaceTrackTLE/data/exports/tle2025.txt")  # Path to the full TLE file
     output_file_path = f'tle{norad_id}.txt'  # Path to the filtered TLE file
 
     

@@ -59,7 +59,7 @@ def runTest():
         ims = []
         imData = np.zeros((imAngles.shape[0],3))
         for j in range(imAngles.shape[0]):
-            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[j,0]},{imAngles[j,1]}).npy"))
+            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[j,0]},{imAngles[j,1]}).npy"))
             ims.append(im)
             imData[j,:] = np.array([imAngles[j,0], imAngles[j,1], 705])
 
@@ -67,7 +67,7 @@ def runTest():
 
         imsCosts = np.array(cost)
         matFileName = f'bh_ratio_error_simulation_705km_costs_{k+1}'
-        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_BHRatio_Test")   
+        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_BHRatio_Test")   
         fullMatPath = pathCost / matFileName
         np.save(fullMatPath, imsCosts)
 
@@ -77,7 +77,7 @@ def analyzeBHTest():
     bases = alt*np.tan(np.radians(angs))
     bhRatios = 2*bases / alt
 
-    path = Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_BHRatio_Test")
+    path = Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_BHRatio_Test")
     costs = []
 
     for k in range(len(angs)):
@@ -97,7 +97,7 @@ def analyzeBHTest():
 
     # Save the graphic and data file
     fileName = 'cost_changing_bhRatio_simulation_graphic.png'
-    pathNew = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostResults")   
+    pathNew = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_CostResults")   
     fullPath = pathNew / fileName
     plt.savefig(fullPath)
 

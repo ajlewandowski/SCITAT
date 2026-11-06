@@ -69,7 +69,7 @@ def runTest():
         ims = []
         imData = np.zeros((imAngles.shape[0],3))
         for k in range(imAngles.shape[0]):
-            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
             ims.append(im)
             imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
 
@@ -82,7 +82,7 @@ def runTest():
         print(cost)
         print()
 
-        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9_CostMaps_705km")   
+        pathCost = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_CostMaps_705km")   
 
         imsAngs = np.array(imAngles)
         matFileName = f'random_full_705km_angles_{j}'

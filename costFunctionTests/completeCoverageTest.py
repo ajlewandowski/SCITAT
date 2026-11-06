@@ -64,7 +64,7 @@ def runTest():
     ims = []
     imData = np.zeros((imAngles.shape[0],3))
     for j in range(imAngles.shape[0]):
-        # im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[j,0]},{imAngles[j,1]}).npy"))
+        # im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[j,0]},{imAngles[j,1]}).npy"))
         # ims.append(im)
         imData[j,:] = np.array([imAngles[j,0], imAngles[j,1], 705])
 
