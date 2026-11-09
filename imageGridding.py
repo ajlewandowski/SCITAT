@@ -83,7 +83,7 @@ class imageGridding:
         if matMin > 0 and matMax > 0:
             im = ax.imshow(GSDs, vmin = matMin, vmax = matMax, origin='lower', cmap='coolwarm', interpolation='nearest')
         else:
-            im = ax.imshow(GSDs, origin='lower', cmap='coolwarm', interpolation='nearest')
+            im = ax.imshow(GSDs, origin='lower', cmap='jet', interpolation='nearest')
         cbar = fig.colorbar(im)
         cbar.set_label('Ground Sampling Distance (m)')
         stepRow = (nRow - 1) / (len(selectIndRow) - 1)
@@ -152,7 +152,7 @@ class imageGridding:
         if matMin > 0 and matMax > 0:
             im = ax.imshow(GSDs, vmin = matMin, vmax = matMax, origin='lower', cmap='coolwarm', interpolation='nearest')
         else:
-            im = ax.imshow(GSDs, origin='lower', cmap='coolwarm', interpolation='nearest')
+            im = ax.imshow(GSDs, origin='lower', cmap='jet', interpolation='nearest')
         cbar = fig.colorbar(im)
         cbar.set_label('Ground Sampling Distance (m)')
         stepRow = (nRow - 1) / (len(selectIndRow) - 1)

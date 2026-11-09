@@ -26,27 +26,11 @@ def runTest():
     print()
 
     alt = 705
-
-    # This step is defining parameters of Landsat-8 and its orbit, as well as finding the closest epoch to the desired
-    # image time (imTime). This section will collect the ground track of the orbit.
-    imTime = ["2025-12-30T17:00:00", "2025-12-30T17:03:24"]
-
-    tlePath = Path("/exports/nfs_share/Users/al62352/SpaceTrackTLE/tle49260.txt")
-    tles = getTLEData(tlePath)
-    line1, line2, closeTime = tles.printTLE(imTime[0])
-    print()
+    vec = np.zeros(10)
 
     #                  FOV, Focal, Pixel #, GSD, Swath, Alt
-    swath = 2*alt*1e3*np.tan(np.deg2rad(15.0/2))
+    swath = 2*alt*1e3*np.tan(np.deg2rad(15.0/2)) #m
     sens = np.array([np.deg2rad(15.0), 0.886, 6196, swath/6196, swath, alt*1e3])
-    target = np.array([30.30617, -97.88121])
-    
-    oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(alt*1e3, swath),req_target_sunlit=True)
-    L9 = Satellite(name="Landsat-9",
-        orbit=TwoLineElements(tle=[line1,line2]), instruments=[oli])
-    times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
-    state84 = collect_orbit_track(L9, times, coordinates = OrbitCoordinate.WGS84, sat_sunlit = True, solar_altaz = True, solar_beta = True)
-    stateECEF = collect_orbit_track(L9, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF)    
 
     #### Finding the maximum satellite look angle given the altitude, and studying 75% of it
     maxLook = np.arcsin(aeKM / (aeKM + alt))*(180/np.pi)
@@ -59,7 +43,7 @@ def runTest():
     altitude = alt
 
     # print(f"Producing Ground Sampling Distance (GSD) Heatmaps from {startAng}° to {stopAng}° in steps of {stepAng}°.")
-    gridded = imageGridding("49260", state84, stateECEF, times, sens, target)
+    gridded = imageGridding("49260", vec, vec, vec, sens, vec)
     minGSD, maxGSD = gridded.getColorbarMinMax(angVecsNeg, altitude)
     
     pathHeatmap = Path(f"/exports/nfs_share/Users/al62352/ResolutionHeatmaps/PleadisNeo/PN_620km")
