@@ -185,7 +185,7 @@ class imageGeometry:
         fore = imData[0]
         star = imData[1]
 
-        row, col = self.getTargetPlacement(im)
+        row, col = self.getTargetPlacement(im, edge_margin = 40//8)
 
         targCenRow = (row - im.shape[0] // 2)
         targCenCol = (col - im.shape[1] // 2)

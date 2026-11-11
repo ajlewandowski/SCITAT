@@ -374,42 +374,30 @@ def runTest(pathCost, angFactor):
     print("###################################################################################################")
     print()
 
-    # This step is defining parameters of Landsat-8 and its orbit, as well as finding the closest epoch to the desired
-    # image time (imTime). This section will collect the ground track of the orbit.
-    imTime = ["2025-12-30T17:00:00", "2025-12-30T17:03:24"]
-    noradID = 49260
-
-    tlePath = Path(r"/exports/nfs_share/Users/al62352/SpaceTrackTLE/tle49260.txt")
-    tles = getTLEData(tlePath)
-    line1, line2, closeTime = tles.printTLE(imTime[0])
-    print()
-
-    #                  FOV, Focal, Pixel #, GSD, Swath, Alt
-    sens = np.array([np.deg2rad(15.0), 0.886, 6196, 30, 185000, 705000])
-    target = np.array([30.30617, -97.88121])
+    noradID = 00000
     
-    oli = Instrument(name="OLI",field_of_regard=utils.swath_width_to_field_of_regard(705000, 185000),req_target_sunlit=True)
-    L9 = Satellite(name="Landsat-9",
-        orbit=TwoLineElements(tle=[line1,line2]), instruments=[oli])
-    times = pd.date_range(start=closeTime, end=imTime[1], freq="1s", tz="UTC")
-    state84 = collect_orbit_track(L9, times, coordinates = OrbitCoordinate.WGS84, sat_sunlit = True, solar_altaz = True, solar_beta = True)
-    stateECEF = collect_orbit_track(L9, times, orbit_output = OrbitOutput.POSITION_VELOCITY, coordinates = OrbitCoordinate.ECEF) 
+    alt = 400
+    
+    #                  FOV, Focal, Pixel #, GSD (m), Swath (m), Alt (m)
+    swath = 5500
+    pixNum = 2560
+    sens = np.array([np.deg2rad(0.7878045564), 3.6, pixNum, swath/pixNum, swath, alt*1e3])
+    vec = np.zeros(10) 
 
     aeKM = 6378.137
     altitude = sens[5] / 1e3
-    maxLook = np.arcsin(aeKM / (aeKM + altitude))*(180/np.pi)
-    maxOffNad = round(0.75*angFactor*maxLook)
+    maxOffNad = 48
 
-    gridded = imageGridding("49260", state84, stateECEF, times, sens, target)
+    gridded = imageGridding(str(noradID), vec, vec, vec, sens, vec)
     angVec = np.array([0, maxOffNad])
     minGSD, maxGSD = gridded.getColorbarMinMax(angVec, altitude)
 
     sigmaPix = 0.5
     eMax = 25.0
     
-    imageGeo = imageGeometry(noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
+    imageGeo = imageGeometry(noradID, vec, vec, sens, vec, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
 
-    for j in range(83,501,1):
+    for j in range(1,501,1):
         rng = np.random.default_rng()
         nImages = 15
         imAngles = rng.integers(-maxOffNad, maxOffNad+1, size=(nImages,2))
@@ -417,9 +405,9 @@ def runTest(pathCost, angFactor):
         ims = []
         imData = np.zeros((imAngles.shape[0],3))
         for k in range(imAngles.shape[0]):
-            im = np.load(Path(f"/exports/nfs_share/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+            im = gridded.getGSDMatrix(alt, imAngles[k,0], imAngles[k,1], step=16)
             ims.append(im)
-            imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
+            imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], alt])
 
         cost = imageGeo.getCostFunction(ims, imData, imAngles)
 
@@ -443,13 +431,11 @@ def runTest(pathCost, angFactor):
 
 
 if __name__ == "__main__":
-    # pathCost = Path("/exports/nfs_share/Users/al62352/ResolutionHeatmaps/LS9/LS9_Random15_OptimizationData")
-    # pathResult = Path("/exports/nfs_share/Users/al62352/ResolutionHeatmaps/LS9/LS9_CostResults")   
-    # N_FILES = 250
-    # plotResults(pathCost, pathResult, N_FILES)
-
-
-    pathCost = Path("/exports/nfs_share/Users/al62352/ResolutionHeatmaps/LS9/LS9_Random15_OptimizationData_OneQuarter")   
-    angFactor = 0.25
+    pathCost = Path("/exports/nfs_share/Users/al62352/ResolutionHeatmaps/SkySat/SS_R15_Data")   
+    angFactor = 1.0
     runTest(pathCost, angFactor)
+
+    pathResult = Path("/exports/nfs_share/Users/al62352/ResolutionHeatmaps/SkySat/SS_R15_Results")   
+    N_FILES = 500
+    plotResults(pathCost, pathResult, N_FILES)
     

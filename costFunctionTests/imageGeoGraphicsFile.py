@@ -105,7 +105,8 @@ def runBigSymmetricSim():
     ims = []
     imData = np.zeros((imAngles.shape[0],3))
     for k in range(imAngles.shape[0]):
-        im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+        folder = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km")
+        im = imageGridding.loadGSD(folder, 705, imAngles[k,0], imAngles[k,1])
         ims.append(im)
         imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
 
@@ -155,7 +156,8 @@ def runRandomSymmetryTest():
             ims = []
             imData = np.zeros((imCopy.shape[0],3))
             for k in range(imCopy.shape[0]):
-                im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_({imCopy[k,0]},{imCopy[k,1]}).npy"))
+                folder = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km")
+                im = imageGridding.loadGSD(folder, 705, imAngles[k,0], imAngles[k,1])
                 ims.append(im)
                 imData[k,:] = np.array([imCopy[k,0], imCopy[k,1], altitude])
 
@@ -243,7 +245,8 @@ def runFullQuadrantSim():
         ims = []
         imData = np.zeros((imAngles.shape[0],3))
         for k in range(imAngles.shape[0]):
-            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+            folder = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km")
+            im = imageGridding.loadGSD(folder, 705, imAngles[k,0], imAngles[k,1])
             ims.append(im)
             imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
 
@@ -293,7 +296,8 @@ def runThreeQuadrantSim():
         ims = []
         imData = np.zeros((imAngles.shape[0],3))
         for k in range(imAngles.shape[0]):
-            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+            folder = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km")
+            im = imageGridding.loadGSD(folder, 705, imAngles[k,0], imAngles[k,1])
             ims.append(im)
             imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
 
@@ -350,7 +354,8 @@ def runTwoQuadrantSim():
         ims = []
         imData = np.zeros((imAngles.shape[0],3))
         for k in range(imAngles.shape[0]):
-            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+            folder = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km")
+            im = imageGridding.loadGSD(folder, 705, imAngles[k,0], imAngles[k,1])
             ims.append(im)
             imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
 
@@ -389,7 +394,8 @@ def runOneQuadrantSim():
         ims = []
         imData = np.zeros((imAngles.shape[0],3))
         for k in range(imAngles.shape[0]):
-            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_({imAngles[k,0]},{imAngles[k,1]}).npy"))
+            folder = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km")
+            im = imageGridding.loadGSD(folder, 705, imAngles[k,0], imAngles[k,1])
             ims.append(im)
             imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], altitude])
 

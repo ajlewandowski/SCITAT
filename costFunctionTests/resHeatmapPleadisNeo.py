@@ -50,20 +50,20 @@ def runTest():
             fig = gridded.getGSDArray(alt, angVecsPos[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
             plt.close()
 
-    # for i in range(len(angVecsNeg)):
-    #     for j in range(len(angVecsPos)):
-    #         fig = gridded.getGSDArray(alt, angVecsNeg[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
-    #         plt.close()
+    for i in range(len(angVecsNeg)):
+        for j in range(len(angVecsPos)):
+            fig = gridded.getGSDArray(alt, angVecsNeg[i], angVecsPos[j], minGSD, maxGSD, True, True, pathHeatmap)
+            plt.close()
 
-    # for i in range(len(angVecsPos)):
-    #     for j in range(len(angVecsNeg)):
-    #         fig = gridded.getGSDArray(alt, angVecsPos[i], angVecsNeg[j], minGSD, maxGSD, True, True, pathHeatmap)
-    #         plt.close()
+    for i in range(len(angVecsPos)):
+        for j in range(len(angVecsNeg)):
+            fig = gridded.getGSDArray(alt, angVecsPos[i], angVecsNeg[j], minGSD, maxGSD, True, True, pathHeatmap)
+            plt.close()
 
-    # for i in range(len(angVecsNeg)):
-    #     for j in range(len(angVecsNeg)):
-    #         fig = gridded.getGSDArray(alt, angVecsNeg[i], angVecsNeg[j], minGSD, maxGSD, True, True, pathHeatmap)
-    #         plt.close()
+    for i in range(len(angVecsNeg)):
+        for j in range(len(angVecsNeg)):
+            fig = gridded.getGSDArray(alt, angVecsNeg[i], angVecsNeg[j], minGSD, maxGSD, True, True, pathHeatmap)
+            plt.close()
 
 
     print()

@@ -64,7 +64,8 @@ def runTest():
         ims = []
         imData = np.zeros((imAngles.shape[0],3))
         for j in range(imAngles.shape[0]):
-            im = np.load(Path(f"D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_{alts[k]}km/GSDarray_matrix_{alts[k]}_km_offnadir_({imAngles[j,0]},{imAngles[j,1]}).npy"))
+            folder = Path(f"/exports/nfs_share/Users/al62352/ResolutionHeatmaps/LS9/LS9_{alts[k]}km")
+            im = imageGridding.loadGSD(folder, alts[k], imAngles[k,0], imAngles[k,1])
             ims.append(im)
             imData[j,:] = np.array([imAngles[j,0], imAngles[j,1], altitude])
 

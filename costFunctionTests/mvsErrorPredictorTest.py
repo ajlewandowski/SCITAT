@@ -4,6 +4,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 from pathlib import Path
+from imageGridding import imageGridding
 
 def computeMVSCostMap(gsdMats, offNadAngles, sigmaPix, eMax):
     """
@@ -63,11 +64,17 @@ def computeMVSCostMap(gsdMats, offNadAngles, sigmaPix, eMax):
 if __name__ == "__main__":
     # Generate 10 mock GSD matrices (1000x1000 pixels each)
     # Using random GSDs between 0.3m and 0.6m to simulate different satellite passes
-    data1 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_(3.0,15.0).npy"))
-    data2 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_(0.0,15.0).npy"))
-    data3 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_(0.0,0.0).npy"))
-    data4 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_(1.0,20.0).npy"))
-    data5 = np.load(Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km/GSDarray_matrix_705_km_offnadir_(2.0,25.0).npy"))
+    swath = 705*1e3*np.tan(np.deg2rad(15.0))
+    sens = np.array([np.deg2rad(15.0), 0.886, 6196, swath/6196, swath, 705*1e3])
+    vec = np.zeros(10)
+    gridded = imageGridding("49260", vec, vec, vec, sens, vec)
+
+    folder = Path("D:/Users/al62352/ResolutionHeatmaps/LS9/LS9_705km")
+    data1 = imageGridding.loadGSD(folder, 705, 3, 15)
+    data2 = imageGridding.loadGSD(folder, 705, 0, 15)
+    data3 = imageGridding.loadGSD(folder, 705, 0, 0)
+    data4 = imageGridding.loadGSD(folder, 705, 1, 20)
+    data5 = imageGridding.loadGSD(folder, 705, 2, 25)
 
     dataMats = [data1, data2, data3, data4, data5]
     
