@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from tatc import utils
 from tatc.schemas import Instrument, Satellite, TwoLineElements
 import pandas as pd
-from getTLEData import getTLEData
+from processingTLEs.getTLEData import getTLEData
 from tatc.analysis import collect_orbit_track
 
 def runTest1():

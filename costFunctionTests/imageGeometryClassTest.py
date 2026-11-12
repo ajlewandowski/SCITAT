@@ -4,14 +4,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
-from imageGeometry import imageGeometry
+from imageGeometryClass import imageGeometry
 from pathlib import Path
 import matplotlib.pyplot as plt
-from imageGridding import imageGridding
+from imageGriddingClass import imageGridding
 from tatc import utils
 from tatc.schemas import Instrument, Satellite, TwoLineElements
 import pandas as pd
-from getTLEData import getTLEData
+from processingTLEs.getTLEData import getTLEData
 from tatc.analysis import collect_orbit_track, OrbitCoordinate, OrbitOutput
 
 
@@ -93,13 +93,6 @@ def runTest():
         matFileName = f'random_full_705km_costs_{j}'   
         fullMatPath = pathCost / matFileName
         np.save(fullMatPath, imsCosts)
-
-
-
-
-
-
-
 
 
     

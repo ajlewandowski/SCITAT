@@ -11,12 +11,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 from scipy.stats import spearmanr
-from imageGridding import imageGridding
-from imageGeometry import imageGeometry
+from imageGriddingClass import imageGridding
+from imageGeometryClass import imageGeometry
 from tatc import utils
 from tatc.schemas import Instrument, Satellite, TwoLineElements
 import pandas as pd
-from getTLEData import getTLEData
+from processingTLEs.getTLEData import getTLEData
 from tatc.analysis import collect_orbit_track, OrbitCoordinate, OrbitOutput
 """
 Visualize trends between 15-step angle profiles and cost.
@@ -375,7 +375,6 @@ def runTest(pathCost, angFactor):
     print()
 
     noradID = 00000
-    
     alt = 400
     
     #                  FOV, Focal, Pixel #, GSD (m), Swath (m), Alt (m)
@@ -386,7 +385,7 @@ def runTest(pathCost, angFactor):
 
     aeKM = 6378.137
     altitude = sens[5] / 1e3
-    maxOffNad = 48
+    maxOffNad = 30
 
     gridded = imageGridding(str(noradID), vec, vec, vec, sens, vec)
     angVec = np.array([0, maxOffNad])
@@ -405,7 +404,7 @@ def runTest(pathCost, angFactor):
         ims = []
         imData = np.zeros((imAngles.shape[0],3))
         for k in range(imAngles.shape[0]):
-            im = gridded.getGSDMatrix(alt, imAngles[k,0], imAngles[k,1], step=16)
+            im = gridded.getGSDMatrix(alt, imAngles[k,0], imAngles[k,1], step=1)
             ims.append(im)
             imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], alt])
 
@@ -419,15 +418,6 @@ def runTest(pathCost, angFactor):
         np.save(fullMatPath, imsNow)
 
         print(f"Ran simulation {j} for the 15 random image optimization study.")
-
-
-
-
-
-
-
-
-
 
 
 if __name__ == "__main__":

@@ -8,12 +8,12 @@ import numpy as np
 from pathlib import Path
 import re
 import matplotlib.pyplot as plt
-from imageGeometry import imageGeometry
-from imageGridding import imageGridding
+from imageGeometryClass import imageGeometry
+from imageGriddingClass import imageGridding
 from tatc import utils
 from tatc.schemas import Instrument, Satellite, TwoLineElements
 import pandas as pd
-from getTLEData import getTLEData
+from processingTLEs.getTLEData import getTLEData
 from tatc.analysis import collect_orbit_track, OrbitCoordinate, OrbitOutput
 
 def runCostVsNumImages():

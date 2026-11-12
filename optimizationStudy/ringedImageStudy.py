@@ -8,12 +8,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from scipy.stats import spearmanr, kruskal, mannwhitneyu
-from imageGridding import imageGridding
-from imageGeometry import imageGeometry
+from imageGriddingClass import imageGridding
+from imageGeometryClass import imageGeometry
 from tatc import utils
 from tatc.schemas import Instrument, Satellite, TwoLineElements
 import pandas as pd
-from getTLEData import getTLEData
+from processingTLEs.getTLEData import getTLEData
 from tatc.analysis import collect_orbit_track, OrbitCoordinate, OrbitOutput
 
 def runTest(pathCost):

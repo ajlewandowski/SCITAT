@@ -4,7 +4,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 from pathlib import Path
-from imageGridding import imageGridding
+from imageGriddingClass import imageGridding
 
 def computeMVSCostMap(gsdMats, offNadAngles, sigmaPix, eMax):
     """
