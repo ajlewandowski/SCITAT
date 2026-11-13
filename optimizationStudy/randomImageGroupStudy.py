@@ -396,8 +396,10 @@ def runTest(pathCost, angFactor):
     
     imageGeo = imageGeometry(noradID, vec, vec, sens, vec, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
 
+    BASE_SEED = 20261113            # change to draw a new, still reproducible, batch
     for j in range(1,501,1):
-        rng = np.random.default_rng()
+        # Seed from (base, set number) so set j can be regenerated exactly
+        rng = np.random.default_rng([BASE_SEED, j])
         nImages = 15
         imAngles = rng.integers(-maxOffNad, maxOffNad+1, size=(nImages,2))
 

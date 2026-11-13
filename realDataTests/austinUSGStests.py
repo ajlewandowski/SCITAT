@@ -18,8 +18,6 @@ def runTest1():
     print()
     print("###################################################################################################")
     print()
-    username = "alec.lewandowski@utexas.edu"
-    password = "!Lew3dglatutaustin"
     imTime = ["2025-12-22T17:00:00", "2025-12-22T17:03:15"]
     noradID = 39084
     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
@@ -58,8 +56,6 @@ def runTest2():
     print()
     print("###################################################################################################")
     print()
-    username = "alec.lewandowski@utexas.edu"
-    password = "!Lew3dglatutaustin"
     imTime = ["2025-12-06T17:00:00", "2025-12-06T17:03:16"]
     noradID = 39084
     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
@@ -98,8 +94,6 @@ def runTest3():
     print()
     print("###################################################################################################")
     print()
-    username = "alec.lewandowski@utexas.edu"
-    password = "!Lew3dglatutaustin"
     imTime = ["2025-11-20T17:00:00", "2025-11-20T17:03:18"]
     noradID = 39084
     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
@@ -138,8 +132,6 @@ def runTest4():
     print()
     print("###################################################################################################")
     print()
-    username = "alec.lewandowski@utexas.edu"
-    password = "!Lew3dglatutaustin"
     imTime = ["2025-11-04T17:00:00", "2025-11-04T17:03:18"]
     noradID = 39084
     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
@@ -178,8 +170,6 @@ def runTest5():
     print()
     print("###################################################################################################")
     print()
-    username = "alec.lewandowski@utexas.edu"
-    password = "!Lew3dglatutaustin"
     imTime = ["2025-12-30T17:00:00", "2025-12-30T17:03:24"]
     noradID = 49260
     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])

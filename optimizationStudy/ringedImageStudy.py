@@ -58,15 +58,28 @@ def runTest(pathCost):
     
     imageGeo = imageGeometry(noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
 
+    # Every integer (along, cross) pair we have a heatmap for, and its true off-nadir angle
+    axisMax = int(ringLimits[-1])
+    grid = np.arange(-axisMax, axisMax + 1)
+    allAngles = np.array(np.meshgrid(grid, grid, indexing="ij")).reshape(2, -1).T
+    allOffNadir = imageGeometry.offNadir(allAngles)
+
+    BASE_SEED = 20261113            # change to draw a new, still reproducible, batch
+    nImages = 15
+
     for i in range(len(ringLimits) - 1):
         angMax = ringLimits[i+1]
         angMin = ringLimits[i]
+
+        # Pointings whose TRUE off-nadir angle lies in [angMin, angMax)
+        inRing = allAngles[(allOffNadir >= angMin) & (allOffNadir < angMax)]
+        print(f"Ring {angMin}-{angMax} deg: {len(inRing)} candidate pointings")
+
         for j in range(25,101,1):
-            rng = np.random.default_rng()
-            nImages = 15
-            mags = rng.integers(angMin, angMax, size=(nImages,2))
-            signs = rng.choice([-1,1], size=(nImages,2))
-            imAngles = signs * mags
+            # Seed from (base, ring, set) so any single set can be regenerated
+            rng = np.random.default_rng([BASE_SEED, i, j])
+            # Uniform over the ring's grid points, no repeated pointing within a set
+            imAngles = inRing[rng.choice(len(inRing), size=nImages, replace=False)]
 
 
             ims = []
@@ -119,7 +132,9 @@ def plotRingResults(pathCost, pathResult):
     # ---------------------------------------------------------------------------
     # Assign each set to a ring (majority ring of its 15 images)
     # ---------------------------------------------------------------------------
-    off_nadir = np.hypot(along, cross)                          # (N, 15)
+    # True off-nadir angle, same definition the sampler uses
+    off_nadir = np.degrees(np.arctan(np.hypot(np.tan(np.radians(along)),
+                                              np.tan(np.radians(cross)))))   # (N, 15)
     img_ring = np.clip(np.digitize(off_nadir, RING_EDGES) - 1, 0, n_rings - 1)
     ring = np.array([np.bincount(r, minlength=n_rings).argmax() for r in img_ring])
     mean_off = off_nadir.mean(1)

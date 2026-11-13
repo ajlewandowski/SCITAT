@@ -37,6 +37,38 @@ class imageGeometry:
         self.targetOverlap = 75.0
         self.pixGSDlimFactor = 0.25
 
+        # Azimuth coverage: each view "covers" +/- azHalfWidth degrees of azimuth
+        # around the target. 22.5 deg means 8 evenly spaced views fill the circle.
+        # This is a geometry setting, independent of the sensor's FOV.
+        self.azHalfWidth = 22.5
+        # Views closer to nadir than this have no meaningful azimuth and are skipped
+        self.minAzOffNadir = 2.0
+
+    @staticmethod
+    def lookVectors(angles):
+        """
+        Unit line-of-sight vectors for (along-track, cross-track) pointing angles in deg.
+        Local frame: x = along-track, y = cross-track, z = down (nadir).
+        Flat-Earth approximation: ignores Earth curvature, so incidence angle at the
+        ground equals the off-nadir angle (a few degrees low at 30-40 deg off-nadir).
+        """
+        a = np.radians(np.asarray(angles, dtype=float))
+        v = np.column_stack([np.tan(a[:, 0]), np.tan(a[:, 1]), np.ones(len(a))])
+        return v / np.linalg.norm(v, axis=1, keepdims=True)
+
+    @staticmethod
+    def offNadir(angles):
+        """True off-nadir angle (deg) of each (along, cross) pointing."""
+        a = np.radians(np.asarray(angles, dtype=float))
+        return np.degrees(np.arctan(np.hypot(np.tan(a[:, 0]), np.tan(a[:, 1]))))
+
+    def getConvergenceAngles(self, imAngles):
+        """Convergence angle (deg) between every pair of views' lines of sight."""
+        v = self.lookVectors(imAngles)
+        cosAng = np.clip(v @ v.T, -1.0, 1.0)
+        iu = np.triu_indices(len(v), 1)
+        return np.degrees(np.arccos(cosAng[iu]))
+
     def getCostFunction(self, ims, imData, imAngles):
 
         overlapMean, overlapSlices, overlap = self.getOverlapRadius(ims, imData)
@@ -216,28 +248,25 @@ class imageGeometry:
 
         return BHRatio
 
-    def getCoverage(self, ims, imData):
+    def getCoverage(self, ims, imData, return_spans=False):
+        """
+        Fraction of the 360 deg of azimuth around the target that is seen by the views.
+        Each view (off-nadir >= minAzOffNadir) covers +/- azHalfWidth around the
+        azimuth of its line of sight as seen from the target.
+        """
+        angles = np.asarray(imData[:, 0:2], dtype=float)
+        dataIm = angles[self.offNadir(angles) >= self.minAzOffNadir]
+        if len(dataIm) == 0:
+            return (0.0, np.zeros((0, 2))) if return_spans else 0.0
 
-        fov = self.sens[0]
-        halfFov = np.degrees(fov) / 2
+        # Azimuth of the satellite as seen from the target (target -> satellite
+        # is the reverse of the line of sight), measured from +along-track toward
+        # +cross-track.
+        v = self.lookVectors(dataIm)
+        az = np.degrees(np.arctan2(-v[:, 1], -v[:, 0])) % 360
 
-        dataIm = imData[~np.all(imData[:, 0:2] == 0.0, axis=1)]
-
-        imSpan = np.zeros((dataIm.shape[0],2))
-        for k in range(dataIm.shape[0]):
-            foreAng = np.radians(abs(dataIm[k,0]))
-            starAng = np.radians(abs(dataIm[k,1]))
-
-            signFore = np.sign(dataIm[k,0])
-            signStar = np.sign(dataIm[k,1])
-
-            ang = np.arctan2(np.tan(-signFore * foreAng), np.tan(-signStar * starAng))
-            ang = np.degrees(ang) % 360
-
-            imSpanEnd = (ang + (halfFov)) % 360
-            imSpanStart = (ang - (halfFov)) % 360
-
-            imSpan[k,:] = np.array([imSpanStart, imSpanEnd])
+        imSpan = np.column_stack([(az - self.azHalfWidth) % 360,
+                                  (az + self.azHalfWidth) % 360])
 
         segs = []
         for s, e in np.asarray(imSpan, dtype=float) % 360:
@@ -256,6 +285,8 @@ class imageGeometry:
                 cur_e = max(cur_e, e)
         covered += cur_e - cur_s
 
+        if return_spans:
+            return covered / 360, imSpan
         return covered / 360
 
     def getGSDError(self, overlapMean):
@@ -282,7 +313,6 @@ class imageGeometry:
         Computes MVS cost map where unusable pixels have been set to np.nan.
         All input matrices must still be the same dimensional shape (e.g., 1000x1000).
         """
-        offNadAngles = np.array(imAngles.flatten())
         # 1. 3D Vectorization
         gsdCube = np.stack(gsdMats, axis=0)
         
@@ -307,8 +337,10 @@ class imageGeometry:
             baseErrMap = np.where(wSumMat > 0, np.sqrt(1.0 / wSumMat), np.inf)
         
         # 4. Geometry Penalty (Assumes global pass geometry)
-        convergenceDeg = np.max(offNadAngles) - np.min(offNadAngles)
-        theta = np.radians(np.clip(abs(convergenceDeg), 1.0, 179.0))
+        # Largest convergence angle between any two lines of sight (true 3D angle,
+        # not the range of the raw along/cross numbers)
+        convergenceDeg = np.max(self.getConvergenceAngles(imAngles))
+        theta = np.radians(np.clip(convergenceDeg, 1.0, 179.0))
         geometricPenalty = 1.0 / np.sin(theta)
         
         # 5. Redundancy Penalty (Now calculated PER PIXEL)
