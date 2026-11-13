@@ -22,3 +22,6 @@ For live TLE data
     pip install skyfield
     
     pip install cartopy
+
+
+Copyright Alec Lewandowski. All Rights Reserved. For permission to use or copy this code, or if you have questions, contact me at alec.lewandowski@utexas.edu.
