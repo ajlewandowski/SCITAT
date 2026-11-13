@@ -1,0 +1,233 @@
+diff --git a/imageGeometryClass.py b/imageGeometryClass.py
+index 9a04e32..cc1d546 100644
+--- a/imageGeometryClass.py
++++ b/imageGeometryClass.py
+@@ -37,6 +37,38 @@ class imageGeometry:
+         self.targetOverlap = 75.0
+         self.pixGSDlimFactor = 0.25
+ 
++        # Azimuth coverage: each view "covers" +/- azHalfWidth degrees of azimuth
++        # around the target. 22.5 deg means 8 evenly spaced views fill the circle.
++        # This is a geometry setting, independent of the sensor's FOV.
++        self.azHalfWidth = 22.5
++        # Views closer to nadir than this have no meaningful azimuth and are skipped
++        self.minAzOffNadir = 2.0
++
++    @staticmethod
++    def lookVectors(angles):
++        """
++        Unit line-of-sight vectors for (along-track, cross-track) pointing angles in deg.
++        Local frame: x = along-track, y = cross-track, z = down (nadir).
++        Flat-Earth approximation: ignores Earth curvature, so incidence angle at the
++        ground equals the off-nadir angle (a few degrees low at 30-40 deg off-nadir).
++        """
++        a = np.radians(np.asarray(angles, dtype=float))
++        v = np.column_stack([np.tan(a[:, 0]), np.tan(a[:, 1]), np.ones(len(a))])
++        return v / np.linalg.norm(v, axis=1, keepdims=True)
++
++    @staticmethod
++    def offNadir(angles):
++        """True off-nadir angle (deg) of each (along, cross) pointing."""
++        a = np.radians(np.asarray(angles, dtype=float))
++        return np.degrees(np.arctan(np.hypot(np.tan(a[:, 0]), np.tan(a[:, 1]))))
++
++    def getConvergenceAngles(self, imAngles):
++        """Convergence angle (deg) between every pair of views' lines of sight."""
++        v = self.lookVectors(imAngles)
++        cosAng = np.clip(v @ v.T, -1.0, 1.0)
++        iu = np.triu_indices(len(v), 1)
++        return np.degrees(np.arccos(cosAng[iu]))
++
+     def getCostFunction(self, ims, imData, imAngles):
+ 
+         overlapMean, overlapSlices, overlap = self.getOverlapRadius(ims, imData)
+@@ -216,28 +248,25 @@ class imageGeometry:
+ 
+         return BHRatio
+ 
+-    def getCoverage(self, ims, imData):
+-
+-        fov = self.sens[0]
+-        halfFov = np.degrees(fov) / 2
+-
+-        dataIm = imData[~np.all(imData[:, 0:2] == 0.0, axis=1)]
+-
+-        imSpan = np.zeros((dataIm.shape[0],2))
+-        for k in range(dataIm.shape[0]):
+-            foreAng = np.radians(abs(dataIm[k,0]))
+-            starAng = np.radians(abs(dataIm[k,1]))
+-
+-            signFore = np.sign(dataIm[k,0])
+-            signStar = np.sign(dataIm[k,1])
+-
+-            ang = np.arctan2(np.tan(-signFore * foreAng), np.tan(-signStar * starAng))
+-            ang = np.degrees(ang) % 360
++    def getCoverage(self, ims, imData, return_spans=False):
++        """
++        Fraction of the 360 deg of azimuth around the target that is seen by the views.
++        Each view (off-nadir >= minAzOffNadir) covers +/- azHalfWidth around the
++        azimuth of its line of sight as seen from the target.
++        """
++        angles = np.asarray(imData[:, 0:2], dtype=float)
++        dataIm = angles[self.offNadir(angles) >= self.minAzOffNadir]
++        if len(dataIm) == 0:
++            return (0.0, np.zeros((0, 2))) if return_spans else 0.0
+ 
+-            imSpanEnd = (ang + (halfFov)) % 360
+-            imSpanStart = (ang - (halfFov)) % 360
++        # Azimuth of the satellite as seen from the target (target -> satellite
++        # is the reverse of the line of sight), measured from +along-track toward
++        # +cross-track.
++        v = self.lookVectors(dataIm)
++        az = np.degrees(np.arctan2(-v[:, 1], -v[:, 0])) % 360
+ 
+-            imSpan[k,:] = np.array([imSpanStart, imSpanEnd])
++        imSpan = np.column_stack([(az - self.azHalfWidth) % 360,
++                                  (az + self.azHalfWidth) % 360])
+ 
+         segs = []
+         for s, e in np.asarray(imSpan, dtype=float) % 360:
+@@ -256,6 +285,8 @@ class imageGeometry:
+                 cur_e = max(cur_e, e)
+         covered += cur_e - cur_s
+ 
++        if return_spans:
++            return covered / 360, imSpan
+         return covered / 360
+ 
+     def getGSDError(self, overlapMean):
+@@ -282,7 +313,6 @@ class imageGeometry:
+         Computes MVS cost map where unusable pixels have been set to np.nan.
+         All input matrices must still be the same dimensional shape (e.g., 1000x1000).
+         """
+-        offNadAngles = np.array(imAngles.flatten())
+         # 1. 3D Vectorization
+         gsdCube = np.stack(gsdMats, axis=0)
+         
+@@ -307,8 +337,10 @@ class imageGeometry:
+             baseErrMap = np.where(wSumMat > 0, np.sqrt(1.0 / wSumMat), np.inf)
+         
+         # 4. Geometry Penalty (Assumes global pass geometry)
+-        convergenceDeg = np.max(offNadAngles) - np.min(offNadAngles)
+-        theta = np.radians(np.clip(abs(convergenceDeg), 1.0, 179.0))
++        # Largest convergence angle between any two lines of sight (true 3D angle,
++        # not the range of the raw along/cross numbers)
++        convergenceDeg = np.max(self.getConvergenceAngles(imAngles))
++        theta = np.radians(np.clip(convergenceDeg, 1.0, 179.0))
+         geometricPenalty = 1.0 / np.sin(theta)
+         
+         # 5. Redundancy Penalty (Now calculated PER PIXEL)
+diff --git a/optimizationStudy/randomImageGroupStudy.py b/optimizationStudy/randomImageGroupStudy.py
+index e26a178..2e3a0f1 100644
+--- a/optimizationStudy/randomImageGroupStudy.py
++++ b/optimizationStudy/randomImageGroupStudy.py
+@@ -396,8 +396,10 @@ def runTest(pathCost, angFactor):
+     
+     imageGeo = imageGeometry(noradID, vec, vec, sens, vec, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
+ 
++    BASE_SEED = 20261113            # change to draw a new, still reproducible, batch
+     for j in range(1,501,1):
+-        rng = np.random.default_rng()
++        # Seed from (base, set number) so set j can be regenerated exactly
++        rng = np.random.default_rng([BASE_SEED, j])
+         nImages = 15
+         imAngles = rng.integers(-maxOffNad, maxOffNad+1, size=(nImages,2))
+ 
+diff --git a/optimizationStudy/ringedImageStudy.py b/optimizationStudy/ringedImageStudy.py
+index db2564c..3b47f66 100644
+--- a/optimizationStudy/ringedImageStudy.py
++++ b/optimizationStudy/ringedImageStudy.py
+@@ -58,15 +58,28 @@ def runTest(pathCost):
+     
+     imageGeo = imageGeometry(noradID, state84, times, sens, target, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
+ 
++    # Every integer (along, cross) pair we have a heatmap for, and its true off-nadir angle
++    axisMax = int(ringLimits[-1])
++    grid = np.arange(-axisMax, axisMax + 1)
++    allAngles = np.array(np.meshgrid(grid, grid, indexing="ij")).reshape(2, -1).T
++    allOffNadir = imageGeometry.offNadir(allAngles)
++
++    BASE_SEED = 20261113            # change to draw a new, still reproducible, batch
++    nImages = 15
++
+     for i in range(len(ringLimits) - 1):
+         angMax = ringLimits[i+1]
+         angMin = ringLimits[i]
++
++        # Pointings whose TRUE off-nadir angle lies in [angMin, angMax)
++        inRing = allAngles[(allOffNadir >= angMin) & (allOffNadir < angMax)]
++        print(f"Ring {angMin}-{angMax} deg: {len(inRing)} candidate pointings")
++
+         for j in range(25,101,1):
+-            rng = np.random.default_rng()
+-            nImages = 15
+-            mags = rng.integers(angMin, angMax, size=(nImages,2))
+-            signs = rng.choice([-1,1], size=(nImages,2))
+-            imAngles = signs * mags
++            # Seed from (base, ring, set) so any single set can be regenerated
++            rng = np.random.default_rng([BASE_SEED, i, j])
++            # Uniform over the ring's grid points, no repeated pointing within a set
++            imAngles = inRing[rng.choice(len(inRing), size=nImages, replace=False)]
+ 
+ 
+             ims = []
+@@ -119,7 +132,9 @@ def plotRingResults(pathCost, pathResult):
+     # ---------------------------------------------------------------------------
+     # Assign each set to a ring (majority ring of its 15 images)
+     # ---------------------------------------------------------------------------
+-    off_nadir = np.hypot(along, cross)                          # (N, 15)
++    # True off-nadir angle, same definition the sampler uses
++    off_nadir = np.degrees(np.arctan(np.hypot(np.tan(np.radians(along)),
++                                              np.tan(np.radians(cross)))))   # (N, 15)
+     img_ring = np.clip(np.digitize(off_nadir, RING_EDGES) - 1, 0, n_rings - 1)
+     ring = np.array([np.bincount(r, minlength=n_rings).argmax() for r in img_ring])
+     mean_off = off_nadir.mean(1)
+diff --git a/realDataTests/austinUSGStests.py b/realDataTests/austinUSGStests.py
+index 2723b61..a1725a5 100644
+--- a/realDataTests/austinUSGStests.py
++++ b/realDataTests/austinUSGStests.py
+@@ -18,8 +18,6 @@ def runTest1():
+     print()
+     print("###################################################################################################")
+     print()
+-    username = "alec.lewandowski@utexas.edu"
+-    password = "!Lew3dglatutaustin"
+     imTime = ["2025-12-22T17:00:00", "2025-12-22T17:03:15"]
+     noradID = 39084
+     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
+@@ -58,8 +56,6 @@ def runTest2():
+     print()
+     print("###################################################################################################")
+     print()
+-    username = "alec.lewandowski@utexas.edu"
+-    password = "!Lew3dglatutaustin"
+     imTime = ["2025-12-06T17:00:00", "2025-12-06T17:03:16"]
+     noradID = 39084
+     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
+@@ -98,8 +94,6 @@ def runTest3():
+     print()
+     print("###################################################################################################")
+     print()
+-    username = "alec.lewandowski@utexas.edu"
+-    password = "!Lew3dglatutaustin"
+     imTime = ["2025-11-20T17:00:00", "2025-11-20T17:03:18"]
+     noradID = 39084
+     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
+@@ -138,8 +132,6 @@ def runTest4():
+     print()
+     print("###################################################################################################")
+     print()
+-    username = "alec.lewandowski@utexas.edu"
+-    password = "!Lew3dglatutaustin"
+     imTime = ["2025-11-04T17:00:00", "2025-11-04T17:03:18"]
+     noradID = 39084
+     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
+@@ -178,8 +170,6 @@ def runTest5():
+     print()
+     print("###################################################################################################")
+     print()
+-    username = "alec.lewandowski@utexas.edu"
+-    password = "!Lew3dglatutaustin"
+     imTime = ["2025-12-30T17:00:00", "2025-12-30T17:03:24"]
+     noradID = 49260
+     sens = np.array([0.886, 6029, 6196, 30*0.886/705000])
