@@ -44,50 +44,221 @@ class imageGeometry:
         # Views closer to nadir than this have no meaningful azimuth and are skipped
         self.minAzOffNadir = 2.0
 
+        # Where the target sits in each image:
+        #   "center"  - the satellite points its boresight at the target, so the target
+        #               is the center pixel of every image (what an agile satellite does)
+        #   "bestGSD" - legacy: the target is moved to the lowest-GSD part of the frame
+        #               (getTargetPlacement), which a real pointing system would not do
+        self.targetMode = "center"
+        # Area of interest (AOI) around the target, as a multiple of the nadir half-swath
+        # (1.0 = one nadir scene centered on the target). Used only when targetMode is
+        # "center", to put every image on the same ground grid.
+        self.aoiScale = 1.0
+
+        # ---- Earth model -----------------------------------------------------------
+        # True: lines of sight, incidence angles, B/H, footprints and the ground grid
+        # use a spherical Earth (needed above ~30 deg off-nadir: at 48 deg from 620 km
+        # the incidence angle at the ground is ~55 deg). False: flat-Earth formulas.
+        self.sphericalEarth = True
+
+        # ---- Overlap requirement (a hard constraint, not a weighted term) ----------
+        # Overlap = share of the target area (the AOI above) that EVERY image is
+        # guaranteed to cover, allowing each image to miss the target by up to
+        # pointingErrDeg on each axis. With target-centered pointing and no pointing
+        # error this is 100 % at any off-nadir angle; it drops with pointing error or
+        # when the AOI is larger than a frame (aoiScale > 1).
+        # Sets below minOverlap are infeasible.
+        self.minOverlap = 0.75
+        self.pointingErrDeg = 0.0
+
+        # ---- Agility limit (a hard constraint) -------------------------------------
+        # Largest true off-nadir angle the satellite can point to (deg). Defaults to
+        # the largest angle in angVec; set per sensor (e.g. 48 for Pleiades Neo).
+        self.maxOffNadirDeg = float(np.max(np.abs(angVec)))
+
+        # Infeasible sets get getCostFunction = infeasibleCost + how far they miss
+        # (overlap shortfall + relative agility excess), so optimizers can recover.
+        self.infeasibleCost = 1.0
+
+        # ---- Image usability grade ------------------------------------------------
+        # A pixel is usable if its GSD <= the GSD limit:
+        #   gsdLimitM (metres) if set - a mission requirement, e.g. 0.6 for 60 cm
+        #   otherwise gsdLimitFactor x nadir GSD (self.minGSD)
+        # Each image's grade is its usable pixel share; unusable pixels are dropped
+        # (set to NaN) before the GSD and MVS error-map terms are computed.
+        self.gsdLimitM = None
+        self.gsdLimitFactor = 1.25
+
+    # ---- Geometry helpers ------------------------------------------------------------
+    # Pointing angles (along, cross) are measured AT THE SATELLITE. On a spherical
+    # Earth the angle at the GROUND is larger: incidence = asin(k sin(offNadir)),
+    # k = (R + h) / R. All helpers take altKm; altKm=None means flat Earth.
+    EARTH_R = 6378137.0
+
     @staticmethod
-    def lookVectors(angles):
-        """
-        Unit line-of-sight vectors for (along-track, cross-track) pointing angles in deg.
-        Local frame: x = along-track, y = cross-track, z = down (nadir).
-        Flat-Earth approximation: ignores Earth curvature, so incidence angle at the
-        ground equals the off-nadir angle (a few degrees low at 30-40 deg off-nadir).
-        """
-        a = np.radians(np.asarray(angles, dtype=float))
+    def pointingVectors(angles):
+        """Unit boresight vectors in the SATELLITE frame (x along, y cross, z nadir).
+        Exact at the satellite for any Earth model - use for slew angles."""
+        a = np.radians(np.asarray(angles, dtype=float).reshape(-1, 2))
         v = np.column_stack([np.tan(a[:, 0]), np.tan(a[:, 1]), np.ones(len(a))])
         return v / np.linalg.norm(v, axis=1, keepdims=True)
 
     @staticmethod
     def offNadir(angles):
-        """True off-nadir angle (deg) of each (along, cross) pointing."""
-        a = np.radians(np.asarray(angles, dtype=float))
+        """True off-nadir angle (deg) of each (along, cross) pointing, at the satellite."""
+        a = np.radians(np.asarray(angles, dtype=float).reshape(-1, 2))
         return np.degrees(np.arctan(np.hypot(np.tan(a[:, 0]), np.tan(a[:, 1]))))
 
-    def getConvergenceAngles(self, imAngles):
-        """Convergence angle (deg) between every pair of views' lines of sight."""
-        v = self.lookVectors(imAngles)
+    @staticmethod
+    def incidenceAngle(offNadirDeg, altKm=None):
+        """Angle (deg) between the line of sight and the local vertical AT THE TARGET.
+        Equals the off-nadir angle on a flat Earth (altKm=None)."""
+        th = np.radians(np.asarray(offNadirDeg, dtype=float))
+        if altKm is None:
+            return np.degrees(th)
+        k = (imageGeometry.EARTH_R + np.asarray(altKm, float) * 1e3) / imageGeometry.EARTH_R
+        return np.degrees(np.arcsin(np.clip(k * np.sin(th), -1.0, 1.0)))
+
+    @staticmethod
+    def lookVectors(angles, altKm=None):
+        """
+        Unit line-of-sight vectors (satellite -> target) in the TARGET's local frame:
+        x = along-track, y = cross-track, z = down. The horizontal direction is the
+        pointing azimuth; the angle from vertical is the incidence angle (spherical
+        Earth when altKm is given, otherwise flat Earth where it equals off-nadir).
+        altKm may be a scalar or one value per pointing.
+        """
+        angles = np.asarray(angles, dtype=float).reshape(-1, 2)
+        a = np.radians(angles)
+        az = np.arctan2(np.tan(a[:, 1]), np.tan(a[:, 0]))
+        inc = np.radians(imageGeometry.incidenceAngle(imageGeometry.offNadir(angles), altKm))
+        return np.column_stack([np.sin(inc) * np.cos(az), np.sin(inc) * np.sin(az), np.cos(inc)])
+
+    @staticmethod
+    def groundOffset(angRad, altM, spherical=True):
+        """Signed ground distance (m) from the sub-satellite point to where a ray at
+        angle angRad (one axis) meets the ground: R * central angle, or h tan(ang)."""
+        if not spherical:
+            return altM * np.tan(angRad)
+        R = imageGeometry.EARTH_R
+        k = (R + altM) / R
+        return R * (np.arcsin(np.clip(k * np.sin(angRad), -1.0, 1.0)) - angRad)
+
+    @staticmethod
+    def groundToAngle(distM, altM, spherical=True):
+        """Inverse of groundOffset: the look angle (rad) that hits ground distance distM."""
+        if not spherical:
+            return np.arctan(distM / altM)
+        R = imageGeometry.EARTH_R
+        lam = distM / R
+        return np.arctan2(np.sin(lam), (R + altM) / R - np.cos(lam))
+
+    def _altKm(self, n, imData=None):
+        """Altitudes (km) for spherical formulas, or None for flat Earth."""
+        if not self.sphericalEarth:
+            return None
+        if imData is not None and np.asarray(imData).shape[1] >= 3:
+            return np.asarray(imData, float)[:, 2]
+        return np.full(n, float(self.alt))
+
+    def getConvergenceAngles(self, imAngles, imData=None):
+        """Convergence angle (deg) at the target between every pair of lines of sight."""
+        v = self.lookVectors(imAngles, self._altKm(len(imAngles), imData))
         cosAng = np.clip(v @ v.T, -1.0, 1.0)
         iu = np.triu_indices(len(v), 1)
         return np.degrees(np.arccos(cosAng[iu]))
 
-    def getCostFunction(self, ims, imData, imAngles):
+    # Order and weights of the five cost terms. Change the weights here (they should
+    # sum to 1) and every study that calls getCostFunction picks them up.
+    # errOverlap is still reported (1 - worst image's overlap share) but has weight 0:
+    # overlap is enforced as a constraint (minOverlap) instead.
+    COST_TERMS = ("errOverlap", "errGSD", "errBH", "errCov", "errCostMap", "errUsable")
+    costWeights = {"errOverlap": 0.0, "errGSD": 0.2, "errBH": 0.2, "errCov": 0.2,
+                   "errCostMap": 0.2, "errUsable": 0.2}
 
+    def getCostComponents(self, ims, imData, imAngles):
+        """
+        Returns the unweighted error terms (each roughly 0..1) plus:
+            feasible      overlapOK and agilityOK
+            overlapOK     overlapMin >= minOverlap
+            overlapMin    share of the target area every image covers (with pointing error)
+            overlapShares each image's own coverage of the target area
+            agilityOK     every image's true off-nadir angle <= maxOffNadirDeg
+            maxOffNadir   the largest true off-nadir angle in the set (deg)
+            penalty       how far an infeasible set misses (0 if feasible)
+            usable        each image's usable-pixel share (GSD <= gsdLimit())
+        getCostFunction is the weighted sum of the COST_TERMS.
+        """
         overlapMean, overlapSlices, overlap = self.getOverlapRadius(ims, imData)
-        overlapRad = overlap["centered"]["rGeo"]
-        errOverlap = (((ims[0].shape[0] // 2) - overlapRad) / (ims[0].shape[0] // 2))
 
-        errGSD = self.getGSDError(overlapMean)
-        
+        # Overlap: target-area coverage (target-centered) or the legacy pixel window
+        if "overlapSet" in overlap:
+            shares = np.asarray(overlap["overlapShares"], float)
+            overlapMin = float(overlap["overlapSet"])
+        else:
+            overlapRad = overlap["centered"]["rGeo"]
+            shares = np.full(len(ims), overlapRad / (ims[0].shape[0] // 2))
+            overlapMin = float(shares.min())
+        errOverlap = 1.0 - overlapMin
+        overlapOK = overlapMin >= self.minOverlap - 1e-9      # tolerance for round-off
+
+        # Agility: no image may point further off-nadir than the satellite can
+        maxOff = float(np.max(self.offNadir(imAngles)))
+        agilityOK = maxOff <= self.maxOffNadirDeg + 1e-9
+        feasible = overlapOK and agilityOK
+        penalty = (max(0.0, self.minOverlap - overlapMin)
+                   + max(0.0, maxOff - self.maxOffNadirDeg) / max(self.maxOffNadirDeg, 1e-9))
+
+        # Usability: grade every whole image, then keep only usable pixels in the stack
+        usable = np.array([self.getUsableFraction(im) for im in ims])
+        errUsable = 1.0 - float(usable.mean())
+        lim = self.gsdLimit()
+        overlapSlices = [np.where(s <= lim, s, np.nan) for s in overlapSlices]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            overlapMean = np.nanmean(np.stack(overlapSlices), axis=0)
+
+        # GSD of the usable pixels only; if nothing is usable, the worst GSD error
+        errGSD = self.getGSDError(overlapMean) if np.isfinite(overlapMean).any() else 1.0
+
         bhRatio = self.getBHRatio(imData)
         errbhRatio = (abs(self.targetBH - bhRatio) / self.targetBH)
-        
+
         errCov = 1.0 - self.getCoverage(ims, imData)
-        
+
         costMap = self.computeMVSCostMap(overlapSlices, imAngles, self.sigmaPix, self.eMax)
         errCostMap = np.mean(costMap)
-        
-        cost = (0.2*errOverlap + 0.2*errGSD + 0.2*errbhRatio + 0.2*errCov + 0.2*errCostMap)
 
-        return cost
+        return {"errOverlap": float(errOverlap), "errGSD": float(errGSD),
+                "errBH": float(errbhRatio), "errCov": float(errCov),
+                "errCostMap": float(errCostMap), "errUsable": float(errUsable),
+                "feasible": bool(feasible), "overlapOK": bool(overlapOK),
+                "agilityOK": bool(agilityOK), "overlapMin": overlapMin,
+                "overlapShares": shares.tolist(), "maxOffNadir": maxOff,
+                "penalty": float(penalty), "usable": usable.tolist()}
+
+    def getCostFunction(self, ims, imData, imAngles, weights=None):
+        """Weighted sum of the cost terms (weights default to self.costWeights).
+        A set that fails the overlap or agility requirement returns
+            infeasibleCost + penalty   (overlap shortfall + relative agility excess)
+        which is worse than any feasible set but still tells an optimizer which
+        infeasible sets are closer to feasible."""
+        comps = self.getCostComponents(ims, imData, imAngles)
+        if not comps["feasible"]:
+            return self.infeasibleCost + comps["penalty"]
+        w = self.costWeights if weights is None else weights
+        return sum(w[k] * comps[k] for k in self.COST_TERMS)
+
+    def gsdLimit(self):
+        """GSD (m) above which a pixel is unusable: gsdLimitM if set, else
+        gsdLimitFactor x nadir GSD."""
+        if self.gsdLimitM is not None:
+            return float(self.gsdLimitM)
+        return self.gsdLimitFactor * self.minGSD
+
+    def getUsableFraction(self, im):
+        """Usability grade of one image: share of its pixels with GSD <= gsdLimit()."""
+        return float(np.mean(im <= self.gsdLimit()))
 
     def getOverlapRadius(self, ims, imData, window="centered",
                         nan_policy="propagate", centerRef="floor",
@@ -121,6 +292,10 @@ class imageGeometry:
         n = len(imgs)
         if n == 0:
             raise ValueError("no images given")
+
+        # Target-centered pointing: register the images on the ground instead of by pixel
+        if self.targetMode == "center":
+            return self.getGroundOverlap(imgs, imData, dtype=dtype)
 
         # --- target offsets relative to each image's center pixel ---
         offsets = np.empty((n, 2), dtype=float)
@@ -209,8 +384,127 @@ class imageGeometry:
 
         return mean, stack, overlap
 
+    def getGroundOverlap(self, ims, imData, dtype=np.float64):
+        """
+        Put every image on one ground grid centered on the target and compare the
+        images point by point on the ground.
+
+        Each image is pointed at the target, so the target is its center pixel. The
+        AOI is a square of half-width aoiScale * h * tan(FOV/2) (one nadir scene for
+        aoiScale = 1), sampled with the same number of points as the images. For every
+        image, each ground point is mapped back to the pixel that sees it:
+
+            look angle to ground point x (along) = groundToAngle(groundOffset(fore) + x)
+            pixel row = (look angle - (fore - FOV/2)) / (FOV / nRows)
+
+        and the same for cross-track / columns. Spherical Earth when sphericalEarth is
+        True (per-axis, the same separable model as the GSD vectors). Ground points outside an image's
+        footprint get NaN, which computeMVSCostMap already treats as "not seen".
+
+        Returns (mean, stack, overlap) like getOverlapRadius:
+            mean    : (nRows, nCols) GSD averaged over the views that see each point
+            stack   : (N, nRows, nCols) each view's GSD on the common ground grid
+            overlap : dict with overlapSet and overlapShares (getAOIOverlap),
+                      coverageFraction (AOI share seen by every image on the grid),
+                      fracTwoViews (share seen by at least two), aoiHalfWidth_m,
+                      and a "centered" entry kept for older callers.
+        """
+        fov = float(self.sens[0])
+        nR, nC = ims[0].shape[:2]
+        sph = self.sphericalEarth
+        aoiHalf = self.aoiHalfWidth()
+        # cell-center samples, so a nadir image covers the nadir-sized AOI exactly
+        u = ((np.arange(nR) + 0.5) / nR * 2 - 1) * aoiHalf    # along-track ground offsets (m)
+        v = ((np.arange(nC) + 0.5) / nC * 2 - 1) * aoiHalf    # cross-track ground offsets (m)
+
+        stack = np.full((len(ims), nR, nC), np.nan, dtype=dtype)
+        for k, im in enumerate(ims):
+            fore, star = np.radians(imData[k, 0]), np.radians(imData[k, 1])
+            h = float(imData[k, 2]) * 1e3
+            r, c = im.shape[:2]
+            # ground point -> look angle (per axis), measured from the sub-satellite point
+            angR = self.groundToAngle(self.groundOffset(fore, h, sph) + u, h, sph)
+            angC = self.groundToAngle(self.groundOffset(star, h, sph) + v, h, sph)
+            rows = np.floor((angR - (fore - fov / 2)) / (fov / r)).astype(int)
+            cols = np.floor((angC - (star - fov / 2)) / (fov / c)).astype(int)
+            okR = (rows >= 0) & (rows < r)
+            okC = (cols >= 0) & (cols < c)
+            g = im[np.ix_(np.clip(rows, 0, r - 1), np.clip(cols, 0, c - 1))].astype(dtype)
+            g[~okR, :] = np.nan
+            g[:, ~okC] = np.nan
+            stack[k] = g
+
+        nSeen = np.sum(np.isfinite(stack), axis=0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            mean = np.nanmean(stack, axis=0)
+        coverage = float(np.mean(nSeen == len(ims)))
+        overlapSet, shares = self.getAOIOverlap(imData)
+
+        overlap = {
+            "mode": "center",
+            "overlapSet": overlapSet,
+            "overlapShares": shares,
+            "coverageFraction": coverage,
+            "fracTwoViews": float(np.mean(nSeen >= 2)),
+            "aoiHalfWidth_m": aoiHalf,
+            # equivalent-radius entry so code written for the pixel method still runs
+            "centered": {"nRows": nR, "nCols": nC, "targetIndex": (nR // 2, nC // 2),
+                         "rGeo": float((nR // 2) * np.sqrt(coverage)),
+                         "slices": None, "sideEq": float(np.sqrt(nR * nC * coverage))},
+        }
+        return mean, list(stack), overlap
+
+    def aoiHalfWidth(self):
+        """Half-width (m) of the target area: aoiScale x the nadir half-swath on the ground."""
+        return self.aoiScale * abs(self.groundOffset(float(self.sens[0]) / 2, float(self.sens[5]),
+                                                     self.sphericalEarth))
+
+    def getAOIOverlap(self, imData):
+        """
+        Overlap of an image set measured on the TARGET AREA (AOI).
+
+        Each image is pointed at the target. On each axis, its footprint on the ground,
+        measured from the target, runs from
+            groundOffset(ang - FOV/2) - groundOffset(ang)  to  groundOffset(ang + FOV/2) - groundOffset(ang)
+        (spherical Earth if sphericalEarth). With a pointing error of up to e
+        (pointingErrDeg) the boresight lands anywhere in ang +/- e, so the ground the
+        image covers for ANY such error is the footprint shrunk on each side:
+            [ g(ang + e - FOV/2) - g(ang),  g(ang - e + FOV/2) - g(ang) ]
+
+        Returns
+            overlapSet : share of the AOI (square of half-width aoiHalfWidth()) that
+                         EVERY image is guaranteed to cover - the number the 75 %
+                         requirement applies to
+            shares     : each image's own guaranteed coverage of the AOI
+
+        An oblique image covers MORE ground than a nadir one, so with no pointing error
+        and aoiScale <= 1 the overlap is 100 % at any off-nadir angle: off-nadir
+        viewing alone does not reduce overlap. Overlap drops when the images may miss
+        the target (pointingErrDeg) or the AOI is larger than one frame (aoiScale > 1).
+        """
+        fov = float(self.sens[0])
+        e = np.radians(self.pointingErrDeg)
+        sph = self.sphericalEarth
+        A = self.aoiHalfWidth()
+        ang = np.radians(np.asarray(imData[:, 0:2], float))          # (N, 2) along, cross
+        h = np.asarray(imData[:, 2], float)[:, None] * 1e3           # (N, 1) metres
+        g0 = self.groundOffset(ang, h, sph)
+        gLo = self.groundOffset(ang + e - fov / 2, h, sph) - g0       # guaranteed footprint
+        gHi = self.groundOffset(ang - e + fov / 2, h, sph) - g0
+        lo = np.maximum(gLo, -A)                                      # clipped to the AOI
+        hi = np.minimum(gHi, A)
+        perImage = np.prod(np.clip(hi - lo, 0, None) / (2 * A), axis=1)
+        common = np.clip(np.minimum(gHi.min(0), A) - np.maximum(gLo.max(0), -A), 0, None)
+        return float(np.prod(common / (2 * A))), perImage.tolist()
+
     def getImCenterCoords(self, im, imData):
-        """ The output coordinate is relative to the center of image, so where is target at optimal GSD relative to image center """
+        """ Target position relative to the image center pixel (row, col).
+            targetMode "center": the boresight is on the target, so (0, 0).
+            targetMode "bestGSD": legacy, where the GSD is lowest in the frame. """
+
+        if self.targetMode == "center":
+            return 0, 0
 
         # imdata will be: fore angle sat, starboard angle sat, target location row, target location col
         # im is the matrix
@@ -225,28 +519,21 @@ class imageGeometry:
         return targCenRow, targCenCol
 
     def getBHRatio(self, imData):
+        """
+        Mean base-to-height ratio over all pairs of views.
 
-        BHs = []
-
-        for i in range(imData.shape[0]):
-            for j in range(i+1, imData.shape[0]):
-                imFore1 = imData[i,0]
-                imStar1 = imData[i,1]
-                imAlt1 = imData[i,2]
-
-                imFore2 = imData[j,0]
-                imStar2 = imData[j,1]
-                imAlt2 = imData[j,2]
-
-                dBF = np.abs(imAlt1 * np.tan(np.deg2rad(imFore1)) - imAlt2 * np.tan(np.deg2rad(imFore2)))
-                dBS = np.abs(imAlt1 * np.tan(np.deg2rad(imStar1)) - imAlt2 * np.tan(np.deg2rad(imStar2)))
-                dB = np.sqrt(dBF**2 + dBS**2)
-                BH = dB / ((imAlt1 + imAlt2)/2)
-                BHs.append(BH)
-
-        BHRatio = np.mean(np.array(BHs))
-
-        return BHRatio
+        For each view, the line of sight from the target reaches unit height at a
+        horizontal offset tan(incidence) * (cos az, sin az). A pair's B/H is the distance
+        between those two offsets. On a flat Earth tan(incidence) * cos az = tan(along),
+        which is the original  hypot(tan(fore1) - tan(fore2), tan(star1) - tan(star2)).
+        With sphericalEarth the incidence angle at the target is used, which is larger
+        than the off-nadir angle (e.g. ~55 deg vs 48 deg from 620 km).
+        """
+        angles = np.asarray(imData[:, 0:2], float)
+        v = self.lookVectors(angles, self._altKm(len(angles), imData))
+        p = v[:, :2] / v[:, 2:3]                       # offsets at unit height
+        i, j = np.triu_indices(len(p), 1)
+        return float(np.mean(np.linalg.norm(p[i] - p[j], axis=1)))
 
     def getCoverage(self, ims, imData, return_spans=False):
         """
@@ -291,7 +578,7 @@ class imageGeometry:
 
     def getGSDError(self, overlapMean):
 
-        meanGSD = np.mean(overlapMean)
+        meanGSD = np.nanmean(overlapMean)     # NaN = ground point no image sees
 
         # Max GSD and Min GSD are calculated from nadir and the max look angle based off altitude
         errGSD = (meanGSD - self.minGSD) / (self.maxGSD - self.minGSD)
@@ -346,9 +633,10 @@ class imageGeometry:
         # 5. Redundancy Penalty (Now calculated PER PIXEL)
         alpha = 0.5
         # Pixels with 5 views get a much better score than pixels with only 2 views!
+        # (np.maximum keeps the unused branch finite: np.where evaluates both sides)
         redundancyPenalty = np.where(
-            validViews >= 2, 
-            1.0 / (1.0 - np.exp(-alpha * (validViews - 1))), 
+            validViews >= 2,
+            1.0 / (1.0 - np.exp(-alpha * np.maximum(validViews - 1, 1))),
             np.inf
         )
         
