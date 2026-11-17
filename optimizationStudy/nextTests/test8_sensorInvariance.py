@@ -70,6 +70,8 @@ def main():
     p.add_argument("--n-random", type=int, default=80)
     p.add_argument("--emax-gsd-factor", type=float, default=10.0)
     args = resolveArgs(p.parse_args())
+    if args.objective != "cost":
+        print(f"note: test 8 compares the weighted cost terms; --objective {args.objective} is ignored here")
     style()
     out = args.out
     rng = np.random.default_rng(args.seed)
@@ -101,7 +103,7 @@ def main():
         with Timer(f"{lab}"):
             # same agility limit / normalization range (--max-off) for every sensor so the
             # benchmark library is scored on equal terms
-            ev = makeEvaluator(args, sensor=s, alt_km=a, sigmaPix=sp, eMax=em)
+            ev = makeEvaluator(args, sensor=s, alt_km=a, sigmaPix=sp, eMax=em, objective="cost")
             for gi, g in enumerate(geoms):
                 r = ev.evaluate(g["angles"])
                 rows.append({"config": lab, "group": grp, "sensor": s, "alt": a, "sigmaPix": sp, "eMax": em,

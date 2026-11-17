@@ -8,6 +8,7 @@ Run every next-step test in order.
 Any extra arguments (e.g. --sensor Landsat9) are passed to every test.
 """
 import subprocess
+import re
 import sys
 import time
 from pathlib import Path
@@ -22,10 +23,12 @@ def main():
         i = args.index("--only")
         only = {int(v) for v in args[i + 1].split(",")}
         args = args[:i] + args[i + 2:]
-    scripts = sorted(HERE.glob("test[0-9]_*.py"))
+    def num(f):
+        return int(re.match(r"test(\d+)_", f.name).group(1))
+    scripts = sorted(HERE.glob("test[0-9]*_*.py"), key=num)
     failed = []
     for s in scripts:
-        n = int(s.name[4])
+        n = num(s)
         if only and n not in only:
             continue
         print(f"\n{'=' * 80}\n{s.name} {' '.join(args)}\n{'=' * 80}", flush=True)

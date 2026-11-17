@@ -40,7 +40,9 @@ Outputs (in --out, default ./results/test9_mvsValidation)
   2_cost_vs_simulated_error.png    cost vs RMSE / completeness / error-or-miss
   3_term_correlations.png          which cost term best predicts the simulated error
   4_cost_bins.png                  simulated error by cost quintile
-  5_real_mvs.png                   (only with --mvs-results)
+  5_predicted_vs_simulated.png     predictedErrorM (given the simulator's city) vs the simulator
+  6_ranking_comparison.png         rank agreement: weighted cost vs predicted error
+  7_real_mvs.png                   (only with --mvs-results)
 
 Run
   python test9_mvsValidation.py --quick          # ~1 min
@@ -56,7 +58,7 @@ from scipy.stats import spearmanr
 from studyCommon import (CostEvaluator, COST_TERMS, TERM_LABELS, TERM_COLORS, SERIES, SEQ, INK2,
                          angleAxes, anglesToPolar, lookVectors, pairGeometry, polarToAngles,
                          save, style, commonArgs, Timer, randomSet, incidenceAngle,
-                         makeEvaluator, resolveArgs)
+                         makeEvaluator, resolveArgs, imageGeometry)
 
 
 # =====================================================================================
@@ -190,7 +192,7 @@ def main():
     style()
     out = args.out
     rng = np.random.default_rng(args.seed)
-    ev = makeEvaluator(args)
+    ev = makeEvaluator(args, objective="cost")          # "cost" column = the weighted cost
     gsd0 = ev.sens[3]
     convBand = tuple(float(v) for v in args.conv_band.split(","))
 
@@ -198,6 +200,21 @@ def main():
     sim = Simulator(dsm, gsd0, gsd0, ev.sigmaPix, convBand, args.miss_penalty,
                     np.random.default_rng([args.seed, 2]),
                     altKm=None if args.flat_earth else ev.alt)
+
+    # Predicted error (imageGeometry.predictedErrorM), two ways:
+    #  "default": the model's own starting parameters and generic scene (--scene) - tests
+    #             whether it RANKS geometries like the simulator without being tuned to it
+    #  "matched": the simulator's city and noise rules (sigma = sigmaPix x GSD x range/h,
+    #             hard 45 deg matching limit, no fusion loss, no systematic floor) - tests
+    #             the closed-form maths against the Monte Carlo in METRES
+    evDef = makeEvaluator(args, objective="cost")
+    evMat = makeEvaluator(args, objective="cost")
+    imageGeometry.registerScene("test9city", dsm, cellM=gsd0, margin=10)
+    gm = evMat.geo
+    gm.errScene = "test9city"
+    gm.errSigma0Pix, gm.errConvGrowth, gm.errScaleExp = ev.sigmaPix, 0.0, 0.0
+    gm.errFusionEff, gm.errSysM, gm.errMissM = 1.0, 0.0, args.miss_penalty
+    gm.errMatch50Deg, gm.errMatchWidthDeg = convBand[1], 0.5
 
     # ------------------------------------------------------------------ the set library
     sets = []
@@ -218,9 +235,15 @@ def main():
                 continue
             m = sim.run(s, args.reps)
             maps.append(m["dzMap"])
+            pd_ = evDef.predict(s)
+            pm_ = evMat.predict(s)
             rows.append({"set_id": sid, "kind": kind, "nImages": len(s), **{k: r[k] for k in COST_TERMS},
                          "cost": r["cost"], "sim_rmse_m": m["rmse"], "sim_le90_m": m["le90"],
                          "sim_completeness": m["completeness"], "sim_missRmse_m": m["missRmse"],
+                         "pred_err_m": pd_["predErrM"], "pred_sigma_m": pd_["predSigmaZM"],
+                         "pred_completeness": pd_["predCompleteness"],
+                         "predM_err_m": pm_["predErrM"], "predM_sigma_m": pm_["predSigmaZM"],
+                         "predM_completeness": pm_["predCompleteness"],
                          "angles": ";".join(f"{a:.2f},{c:.2f}" for a, c in s)})
     df = pd.DataFrame(rows)
     out.mkdir(parents=True, exist_ok=True)
@@ -307,6 +330,56 @@ def main():
     fig.suptitle("Test 9 – Simulated error by cost quintile", fontsize=12)
     save(fig, out, "4_cost_bins")
 
+    # ------------------------------------------------------------------ figure 5: predicted error
+    fig, axes = plt.subplots(1, 3, figsize=(19, 5.6), layout="constrained")
+    pairs_ = [("predM_err_m", "sim_missRmse_m", "error-or-miss RMSE (m)", True),
+              ("predM_sigma_m", "sim_rmse_m", "height RMSE, reconstructed points (m)", True),
+              ("predM_completeness", "sim_completeness", "completeness", False)]
+    for ax, (pc, sc, lab, logax) in zip(axes, pairs_):
+        x, y = df[pc].to_numpy(), df[sc].to_numpy()
+        ok = np.isfinite(x) & np.isfinite(y) & ((x > 0) & (y > 0) if logax else True)
+        for col, kd in zip(SERIES, kinds):
+            k = ok & (df.kind == kd).to_numpy()
+            ax.scatter(y[k], x[k], s=22, color=col, edgecolor="k", lw=0.3, alpha=0.85, label=kd)
+        lo, hi = (min(x[ok].min(), y[ok].min()), max(x[ok].max(), y[ok].max())) if ok.any() else (0, 1)
+        ax.plot([lo, hi], [lo, hi], color=INK2, ls="--", lw=1, label="1:1")
+        if logax:
+            ax.set_xscale("log"); ax.set_yscale("log")
+        rr, _ = bootRho(y[ok], x[ok], brng)
+        ratio = np.median(x[ok] / y[ok]) if logax and ok.any() else np.nan
+        ax.set_xlabel(f"simulated {lab}"); ax.set_ylabel(f"predicted {lab}")
+        ax.set_title(f"ρ = {rr:+.2f}" + (f", median predicted/simulated = {ratio:.2f}" if logax else ""),
+                     fontsize=10)
+    axes[0].legend(fontsize=8)
+    fig.suptitle("Test 9 – Closed-form predicted error vs the Monte Carlo simulator "
+                 "(model given the simulator's city and noise rules)", fontsize=12)
+    save(fig, out, "5_predicted_vs_simulated")
+
+    # ------------------------------------------------------------------ figure 6: ranking comparison
+    target = df.sim_missRmse_m.to_numpy()
+    cands = [("cost", "weighted cost (current)"),
+             ("pred_err_m", f"predicted error, default model ({args.scene} scene)"),
+             ("predM_err_m", "predicted error, simulator-matched model")]
+    res6 = [bootRho(df[c].to_numpy(), target, brng) for c, _ in cands]
+    fig, ax = plt.subplots(figsize=(9.5, 4.8), layout="constrained")
+    for i, ((c, lab), (r, ci)) in enumerate(zip(cands, res6)):
+        ax.barh(i, r, color=SERIES[i], height=0.55)
+        ax.errorbar(r, i, xerr=[[r - ci[0]], [ci[1] - r]], color="k", capsize=4, lw=1)
+        ax.annotate(f"{r:+.2f}", (max(r, 0), i), xytext=(6, 0), textcoords="offset points",
+                    va="center", fontsize=9)
+    ax.set_yticks(range(len(cands)), [lab for _, lab in cands]); ax.invert_yaxis()
+    ax.set_xlim(min(0, min(r for r, _ in res6) - 0.1), 1.05)
+    ax.axvline(0, color=INK2, lw=0.8)
+    ax.set_xlabel("Spearman ρ with simulated error-or-miss RMSE (95% CI)")
+    ax.set_title("Test 9 – Which score ranks geometries like the simulator?")
+    save(fig, out, "6_ranking_comparison")
+    print("\nRank agreement with simulated error-or-miss RMSE:")
+    for (c, lab), (r, ci) in zip(cands, res6):
+        print(f"   {lab:<52s} ρ = {r:+.2f}  (95% CI {ci[0]:+.2f} to {ci[1]:+.2f})")
+    ok = np.isfinite(df.predM_err_m) & (df.sim_missRmse_m > 0)
+    print(f"   simulator-matched model: median predicted/simulated error = "
+          f"{np.median(df.predM_err_m[ok] / df.sim_missRmse_m[ok]):.2f}")
+
     # ------------------------------------------------------------------ Part B: export
     q = np.linspace(0, 1, args.n_export)
     srt = df.sort_values("cost").reset_index(drop=True)
@@ -333,7 +406,7 @@ def main():
             rr = spearmanr(real[x], real.rmse_m).statistic
             ax.set_xlabel(lab); ax.set_ylabel("real MVS RMSE (m)"); ax.set_title(f"Spearman ρ = {rr:+.2f}")
         fig.suptitle(f"Test 9 – Real reconstructions ({len(real)} sets)", fontsize=12)
-        save(fig, out, "5_real_mvs")
+        save(fig, out, "7_real_mvs")
 
     r, ci = bootRho(df.cost.to_numpy(), df.sim_missRmse_m.to_numpy(), brng)
     print(f"Cost vs simulated error-or-miss RMSE: Spearman ρ = {r:+.2f} (95% CI {ci[0]:+.2f} to {ci[1]:+.2f})")

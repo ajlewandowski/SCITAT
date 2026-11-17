@@ -1,6 +1,6 @@
-# Next-step geometry studies (tests 1–9)
+# Next-step geometry studies (tests 1–10)
 
-Nine scripts that build on `randomImageGroupStudy.py` and `ringedImageStudy.py`.
+Ten scripts that build on `randomImageGroupStudy.py` and `ringedImageStudy.py`.
 Together they go from "is the cost function measuring the right things?" to
 "which orbit can actually deliver a low-error multi-view stereo (MVS) set?"
 
@@ -14,7 +14,8 @@ Together they go from "is the cost function measuring the right things?" to
 | 6 | `test6_featureSurrogate.py` | Which stereo-geometry features (convergence, azimuth spread, B/H, ...) drive the cost? | ~2 min |
 | 7 | `test7_orbitConstrained.py` | With real passes, sun and slew limits, what can an orbit deliver? | ~18 min |
 | 8 | `test8_sensorInvariance.py` | Do the conclusions hold across sensors and noise settings? | ~2 min |
-| 9 | `test9_mvsValidation.py` | Does a low cost mean a low 3-D error? (+ sets to reconstruct for real) | <1 min |
+| 9 | `test9_mvsValidation.py` | Does a low cost mean a low 3-D error? Does the predicted error in metres match the simulator? (+ sets to reconstruct for real) | ~1 min |
+| 10 | `test10_predictedError.py` | Scored by predicted DSM error in metres, which geometry is best for open, suburban and urban scenes, and per sensor? | ~1 min |
 
 \*Measured on a laptop-class CPU. Every script accepts `--quick` (a tiny run in
 well under a minute) — run that first to check your setup.
@@ -69,6 +70,46 @@ python runAll.py --quick --sensor PleiadesNeo --gsd-limit-m 0.6 --pointing-err 0
 Usability grade: each image's usable-pixel share is the `errUsable` term (weight 0.2);
 unusable pixels are dropped before the GSD and MVS error-map terms. Test 1 figure 7 maps the usable share and the incidence angle over every pointing.
 
+## Predicted error in metres (`imageGeometry.predictedErrorM`)
+Alongside the weighted cost, `predictedErrorM(ims, imData, imAngles)` returns a predicted
+DSM height error in metres:
+
+    E_rms = sqrt( C (sigma_z^2 + sigma_sys^2) + (1 - C) e_miss^2 )
+
+- **sigma_z** – closed-form triangulation covariance of all views together. Each view's
+  ray noise is matching precision (pixels) × its own ground pixel size × slant range.
+  Matching precision grows with convergence angle and with the GSD ratio of the pair;
+  match probability falls off past ~45° convergence (logistic). Each view is weighted
+  by the chance it matches at least one other view, so pairs are **not** double counted
+  the way summing pair-by-pair information would. `errFusionEff` (0.7) is the
+  loss from real fusion compared with ideal least squares.
+- **C (completeness)** – share of the scene where some matchable pair can see past the
+  buildings, ray-traced on a canonical DSM (`errScene`: `open`, `suburban`, `urban`, or
+  your own via `imageGeometry.registerScene(name, dsm, cellM)`).
+- **sigma_sys** – systematic floor (orbit model / bundle adjustment), `errSysGSD` × nadir GSD
+  (0.5) or an absolute `errSysM`.
+- **e_miss** – error charged where nothing is reconstructed (`errMissM`, 10 m).
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `errSigma0Pix` | 0.3 | matching precision (px) of a small-convergence, equal-GSD pair |
+| `errConvGrowth`, `errConvRefDeg` | 0.5, 30 | precision worsens by (1 + growth (conv/ref)^2) |
+| `errScaleExp` | 1.0 | precision worsens by (GSD ratio)^exp |
+| `errMatch50Deg`, `errMatchWidthDeg` | 45, 3 | convergence where matching succeeds half the time; width of the fall-off |
+| `errFusionEff` | 0.7 | fusion efficiency |
+| `errSysM` / `errSysGSD` | none / 0.5 | systematic floor |
+| `errMissM` | 10 | error charged for unreconstructed area |
+| `errScene` | suburban | occlusion scene |
+
+**These are starting values, not calibrated.** Calibrate them by reconstructing the
+`mvs_validation_sets.csv` sets from test 9 (or your Austin data) and fitting the
+parameters to the measured error; the model's form stays the same.
+
+Test options: `--objective cost|error|sigma` (what the optimizers minimise: the weighted
+cost, predicted E_rms, or predicted sigma_z only) and `--scene open|suburban|urban`.
+Tests 1 and 8 always analyse the weighted cost. `CostEvaluator.predict(angles)` returns
+`predErrM`, `predSigmaZM` and `predCompleteness` for any set.
+
 ## Running
 ```
 cd optimizationStudy/nextTests
@@ -77,7 +118,8 @@ python runAll.py                  # every test, full sizes (~1 h)
 python test7_orbitConstrained.py --help     # each script documents its options
 ```
 Common options (all scripts): `--out DIR` (default `./results/<test>`),
-`--sensor {SkySat, Landsat9, WorldView3}`, `--seed N`, `--quick`.
+`--sensor {SkySat, Landsat9, WorldView3, PleiadesNeo}`, `--seed N`, `--quick`,
+`--objective {cost, error, sigma}`, `--scene {open, suburban, urban}`.
 
 Useful extras:
 - `test1 --from-dir /exports/.../SS_R15_Data` and `test6 --from-dir ...` load your existing `random_15_images_*.npy` sets.

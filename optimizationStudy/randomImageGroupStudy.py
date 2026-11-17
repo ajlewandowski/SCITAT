@@ -35,6 +35,24 @@ import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 from scipy.stats import spearmanr
 
+def trueOffNadir(along, cross):
+    """True off-nadir angle (deg) of (along, cross) pointings - the same definition the
+    cost function's agility limit uses. sqrt(along^2 + cross^2) overstates diagonal
+    pointings, e.g. (30, 30) is 39.2 deg off-nadir, not 42.4."""
+    return np.degrees(np.arctan(np.hypot(np.tan(np.radians(along)), np.tan(np.radians(cross)))))
+
+
+def drawOffNadirRings(ax, rings=(10, 20, 30, 40)):
+    """Dashed rings of constant TRUE off-nadir angle in (along, cross) space.
+    They bulge slightly outward on the diagonals (they are not circles)."""
+    az = np.radians(np.arange(361))
+    for r in rings:
+        t = np.tan(np.radians(r))
+        a = np.degrees(np.arctan(t * np.cos(az)))
+        c = np.degrees(np.arctan(t * np.sin(az)))
+        ax.plot(a, c, ls="--", lw=0.8, color="k", alpha=0.5)
+
+
 def plotResults(pathCost, pathResult, N_FILES):
     # ---------------------------------------------------------------------------
     # 1. Load data  ->  angles (N, 15, 2), cost (N,)
@@ -86,7 +104,7 @@ def plotResults(pathCost, pathResult, N_FILES):
     pts_al = along.ravel()
     pts_cr = cross.ravel()
     pts_cost = np.repeat(cost, T)                   # each image gets its set's cost
-    pts_r = np.hypot(pts_al, pts_cr)
+    pts_r = trueOffNadir(pts_al, pts_cr)
     
     rank = np.empty(N)
     rank[np.argsort(cost)] = np.arange(N)           # 0 = lowest cost
@@ -129,8 +147,7 @@ def plotResults(pathCost, pathResult, N_FILES):
                 gridsize=10, extent=(-lim, lim, -lim, lim), mincnt=5,
                 cmap=cmap, edgecolors="white", linewidths=0.5)
     fig.colorbar(hb, ax=ax, fraction=0.046, label="Mean set cost in cell (bright = low)")
-    for rr in (10, 20, 30):                         # reference rings of off-nadir angle
-        ax.add_patch(plt.Circle((0, 0), rr, fill=False, ls="--", lw=0.8, color="k", alpha=0.5))
+    drawOffNadirRings(ax)                          # reference rings of true off-nadir angle
     ax.set_title("(b) Mean cost of sets that placed an image in each cell")
     
     for ax in axes[0]:
@@ -147,7 +164,7 @@ def plotResults(pathCost, pathResult, N_FILES):
     for x, y, n in zip(c_, m_, n_):
         ax.annotate(f"n={n}", (x, y), textcoords="offset points", xytext=(0, 8),
                     ha="center", fontsize=7, color="gray")
-    ax.set_xlabel("Off-nadir angle √(along² + cross²)  (deg)")
+    ax.set_xlabel("True off-nadir angle  (deg)")
     ax.set_ylabel("Mean cost of sets containing an image here")
     ax.set_title(f"(c) Cost vs distance from nadir   (ρ = {spearmanr(pts_r, pts_cost)[0]:+.2f})")
     ax.grid(alpha=0.3)
@@ -173,7 +190,7 @@ def plotResults(pathCost, pathResult, N_FILES):
     # ---------------------------------------------------------------------------
     # Plot 2: Same as 3(a) and 3(b), but only the TOP_K lowest-cost sets
     # ---------------------------------------------------------------------------
-    TOP_K = 50
+    TOP_K = min(50, N)                              # never more than the sets available
     top = np.argsort(cost)[:TOP_K]                  # indices of the K lowest-cost sets
     top_cost = cost[top]
     top_norm = colors.Normalize(0, TOP_K - 1)       # shade by rank within the top K
@@ -204,9 +221,7 @@ def plotResults(pathCost, pathResult, N_FILES):
     ax.set_title(f"(b) Mean cost per cell, top {TOP_K} sets only (empty = no images)")
     
     for ax in axes:
-        for rr in (10, 20, 30):
-            ax.add_patch(plt.Circle((0, 0), rr, fill=False, ls="--", lw=0.8,
-                                    color="k", alpha=0.5))
+        drawOffNadirRings(ax)
         ax.set_xlabel("Along-track angle (deg)")
         ax.set_ylabel("Cross-track angle (deg)")
         ax.set_aspect("equal")
@@ -262,7 +277,7 @@ def plotResults(pathCost, pathResult, N_FILES):
     # same step across runs) mostly show noise. Plots 8-11 treat each run as a set.
     # ===========================================================================
     abs_al, abs_cr = np.abs(along), np.abs(cross)
-    offnadir = np.hypot(along, cross)                       # total off-nadir per image
+    offnadir = trueOffNadir(along, cross)                   # true off-nadir per image
 
 
     def pairwise_spread(a, c):
@@ -369,7 +384,7 @@ def plotResults(pathCost, pathResult, N_FILES):
         print(f"  random_15_images_{file_nums[i]}: {cost[i]:.4g}")
 
 
-def runTest(pathCost, angFactor, N_FILES):
+def runTest(pathCost, angFactor, N_FILES, gsdLimitM=None):
     print()
     print("###################################################################################################")
     print()
@@ -396,14 +411,23 @@ def runTest(pathCost, angFactor, N_FILES):
     # eMax is the error scale in th eMVS error-map term -> baseGSD should be eMax (sens[3])
     imageGeo = imageGeometry(noradID, vec, vec, sens, vec, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
 
+    # Usable-pixel GSD requirement (m). None keeps the default of 1.25 x nadir GSD
+    # (0.375 m for Pleiades Neo), which makes images beyond ~33 deg unusable.
+    if gsdLimitM is not None:
+        imageGeo.gsdLimitM = gsdLimitM
+    print(f"Usable-pixel GSD limit: {imageGeo.gsdLimit():.3f} m")
+
+    # Integer pointings whose TRUE off-nadir angle is within the agility limit.
+    # Built once - it is the same for every set.
+    g = np.arange(-maxOffNad, maxOffNad + 1)
+    grid = np.array(np.meshgrid(g, g, indexing="ij")).reshape(2, -1).T
+    cone = grid[imageGeometry.offNadir(grid) <= maxOffNad]
+
     BASE_SEED = 20261113            # change to draw a new, still reproducible, batch
     for j in range(1,N_FILES+1,1):
         # Seed from (base, set number) so set j can be regenerated exactly
         rng = np.random.default_rng([BASE_SEED, j])
         nImages = 15
-        g = np.arange(-maxOffNad, maxOffNad + 1)
-        grid = np.array(np.meshgrid(g, g, indexing="ij")).reshape(2, -1).T
-        cone = grid[imageGeometry.offNadir(grid) <= maxOffNad]
         imAngles = cone[rng.choice(len(cone), size=nImages, replace=False)]
 
         ims = []
@@ -429,7 +453,11 @@ if __name__ == "__main__":
     pathCost = Path("/exports/nfs_share/Users/al62352/ResolutionHeatmaps/PleadisNeo/PN_R15_DataNew")   
     angFactor = 1.0
     N_FILES = 250
-    #runTest(pathCost, angFactor, N_FILES)
+    # Usable-pixel GSD requirement in metres. 0.9 m makes every pointing within 46 deg
+    # usable for Pleiades Neo (GSD reaches ~0.8 m at 46 deg); set it to your mission's
+    # requirement, or None for the default 1.25 x nadir GSD (0.375 m).
+    GSD_LIMIT_M = 0.9
+    #runTest(pathCost, angFactor, N_FILES, gsdLimitM=GSD_LIMIT_M)
 
     pathResult = Path("/exports/nfs_share/Users/al62352/ResolutionHeatmaps/PleadisNeo/PN_R15_ResultsNew")   
     plotResults(pathCost, pathResult, N_FILES)

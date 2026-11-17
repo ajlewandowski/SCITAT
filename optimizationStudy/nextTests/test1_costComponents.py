@@ -82,7 +82,10 @@ def main():
         args.n_sets, args.n_res_check = 40, 2
     style()
     out = args.out
-    ev = makeEvaluator(args)
+    # This test analyses the weighted terms themselves, so it always uses the weighted cost
+    if args.objective != "cost":
+        print(f"note: test 1 analyses the weighted cost terms; --objective {args.objective} is ignored here")
+    ev = makeEvaluator(args, objective="cost")
     W0 = dict(ev.geo.costWeights)
 
     # ------------------------------------------------------------------ 1. evaluate
@@ -290,7 +293,7 @@ def main():
         # True full resolution for SkySat-size images; large sensors (Landsat 6196 px,
         # WorldView 42k px) would need several GB per set, so cap the reference at ~2048 px
         pix = int(ev.sens[2])
-        evFull = makeEvaluator(args, target_px=None if pix <= 2600 else 2048)
+        evFull = makeEvaluator(args, objective="cost", target_px=None if pix <= 2600 else 2048)
         idx = np.linspace(0, len(df) - 1, args.n_res_check).round().astype(int)
         fast = np.array([cost0[i] for i in idx])
         full = np.array([evFull.evaluate(sets[i])["costUnconstrained"] for i in idx])

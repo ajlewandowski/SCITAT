@@ -69,8 +69,10 @@ TERM_LABELS = {"errOverlap": "Overlap", "errGSD": "GSD", "errBH": "B/H ratio",
 #             agility limit. 30 deg for the presets that reproduce the original studies;
 #             override with --max-off.
 SENSORS = {
-    # Matches randomImageGroupStudy.py
-    "SkySat": dict(fov_deg=0.7878045564, focal_m=3.6, pix=2560, swath_m=5500, alt_km=400,
+    # SkySat: 0.788 deg FOV (5.5 km swath at 400 km). The swath is covered by three
+    # 2560-pixel detectors, so 7680 pixels across -> 0.72 m nadir GSD at 400 km,
+    # matching Planet's published 0.72 m panchromatic GSD. (2560 pixels gave 2.15 m.)
+    "SkySat": dict(fov_deg=0.7878045564, focal_m=3.6, pix=7680, swath_m=5500, alt_km=400,
                    maxOffNadir=30.0),
     # Matches ringedImageStudy.py
     "Landsat9": dict(fov_deg=15.0, focal_m=0.886, pix=6196, swath_m=185000, alt_km=705,
@@ -128,12 +130,17 @@ class CostEvaluator:
     gsdLimitFactor : a pixel is usable if GSD <= this x nadir GSD
     gsdLimitM    : absolute GSD requirement (m); overrides gsdLimitFactor when given
     sphericalEarth : spherical (default) or flat-Earth geometry
+    objective    : what "cost" means for ranking and optimizing:
+                   "cost"  - the weighted sum of terms (original)
+                   "error" - predicted DSM error in metres, incl. completeness (predictedErrorM)
+                   "sigma" - predicted height error of reconstructed points only (metres)
+    scene        : occlusion scene for the predicted error: "open", "suburban", "urban"
     """
 
     def __init__(self, sensor="SkySat", alt_km=None, sigmaPix=0.5, eMax=25.0,
                  maxOffNadir=None, target_px=320, norm_alt_km=None, targetMode="center",
                  aoiScale=1.0, minOverlap=0.75, pointingErrDeg=0.0, gsdLimitFactor=1.25,
-                 gsdLimitM=None, sphericalEarth=True):
+                 gsdLimitM=None, sphericalEarth=True, objective="cost", scene="suburban"):
         self.sensor = sensor
         self.alt = SENSORS[sensor]["alt_km"] if alt_km is None else alt_km
         self.sens = sensArray(sensor, self.alt)
@@ -157,6 +164,10 @@ class CostEvaluator:
         self.geo.gsdLimitM = gsdLimitM
         self.geo.maxOffNadirDeg = maxOffNadir
         self.geo.sphericalEarth = sphericalEarth
+        self.geo.errScene = scene
+        if objective not in ("cost", "error", "sigma"):
+            raise ValueError("objective must be 'cost', 'error' or 'sigma'")
+        self.objective = objective
 
         self._cache = {}            # (alt, along, cross) -> (gsdFore, gsdStar) decimated
         self.nEvals = 0
@@ -177,7 +188,7 @@ class CostEvaluator:
         return np.outer(gF, gS)
 
     # ---- cost ---------------------------------------------------------------------
-    def evaluate(self, angles, alt=None, weights=None):
+    def evaluate(self, angles, alt=None, weights=None, predict=False):
         """
         angles : (N, 2) along/cross pointing in degrees (N >= 2)
         alt    : None (nominal), a scalar, or a length-N array of altitudes in km
@@ -189,6 +200,9 @@ class CostEvaluator:
             overlapMin              share of the target area every image covers
             usableMean              mean usable-pixel share
             maxOffNadir, penalty    largest off-nadir angle; how far an infeasible set misses
+            predErrM, predSigmaZM, predCompleteness
+                                    predicted error (only when objective is "error"/"sigma",
+                                    or predict=True)
             computed                the cost function ran (False = degenerate geometry)
             ok                      computed AND feasible - the sets to rank and keep
         """
@@ -199,7 +213,8 @@ class CostEvaluator:
         self.nEvals += 1
         out = {k: np.nan for k in COST_TERMS}
         out.update(cost=np.nan, costUnconstrained=np.nan, feasible=False, overlapMin=np.nan,
-                   usableMean=np.nan, maxOffNadir=np.nan, penalty=np.nan, computed=False, ok=False)
+                   usableMean=np.nan, maxOffNadir=np.nan, penalty=np.nan, computed=False, ok=False,
+                   predErrM=np.nan, predSigmaZM=np.nan, predCompleteness=np.nan)
         if n < 2:
             return out
         try:
@@ -212,6 +227,14 @@ class CostEvaluator:
         w = self.geo.costWeights if weights is None else weights
         out.update({k: comps[k] for k in COST_TERMS})
         total = sum(w[k] * comps[k] for k in COST_TERMS)
+        if predict or self.objective != "cost":
+            pe = self.geo.predictedErrorM(ims, imData, angles)
+            out.update(predErrM=pe["errRmsM"], predSigmaZM=pe["sigmaZM"],
+                       predCompleteness=pe["completeness"])
+            if self.objective == "error":
+                total = pe["errRmsM"]
+            elif self.objective == "sigma":
+                total = pe["sigmaZM"]
         out.update(costUnconstrained=total, feasible=comps["feasible"], overlapMin=comps["overlapMin"],
                    usableMean=float(np.mean(comps["usable"])), maxOffNadir=comps["maxOffNadir"],
                    penalty=comps["penalty"], computed=bool(np.isfinite(total)))
@@ -235,8 +258,15 @@ class CostEvaluator:
         if r["ok"]:
             return r["cost"]
         if r["computed"] and infeasible == "penalty":
-            return self.geo.infeasibleCost + r["penalty"]
+            if self.objective == "cost":
+                return self.geo.infeasibleCost + r["penalty"]
+            # metres objectives: far worse than any feasible error, still graded
+            return 1e4 * (1.0 + r["penalty"])
         return failCost
+
+    def predict(self, angles, alt=None):
+        """Predicted error dict for a set, whatever the objective."""
+        return self.evaluate(angles, alt, predict=True)
 
 
 def weightedCost(components, weights):
@@ -569,6 +599,12 @@ def commonArgs(description, defaultOut):
     g.add_argument("--flat-earth", action="store_true", help="use flat-Earth geometry")
     g.add_argument("--target-bh", type=float, default=None,
                    help="target mean B/H for the B/H term (class default 1.0)")
+    g.add_argument("--objective", default="cost", choices=["cost", "error", "sigma"],
+                   help="rank/optimize by the weighted cost (default), the predicted DSM "
+                        "error in metres incl. completeness ('error'), or the predicted "
+                        "height error of reconstructed points only ('sigma')")
+    g.add_argument("--scene", default="suburban", choices=["open", "suburban", "urban"],
+                   help="occlusion scene for the predicted error (default suburban)")
     return p
 
 
@@ -584,7 +620,9 @@ def makeEvaluator(args, **kw):
     opts = dict(maxOffNadir=args.max_off, minOverlap=args.min_overlap,
                 pointingErrDeg=args.pointing_err, aoiScale=args.aoi_scale,
                 gsdLimitM=args.gsd_limit_m, gsdLimitFactor=args.gsd_limit_factor,
-                sphericalEarth=not args.flat_earth)
+                sphericalEarth=not args.flat_earth,
+                objective=getattr(args, "objective", "cost"),
+                scene=getattr(args, "scene", "suburban"))
     opts.update(kw)
     sensor = opts.pop("sensor", args.sensor)
     ev = CostEvaluator(sensor, **opts)

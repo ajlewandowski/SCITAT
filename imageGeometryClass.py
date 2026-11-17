@@ -89,6 +89,35 @@ class imageGeometry:
         self.gsdLimitM = None
         self.gsdLimitFactor = 1.25
 
+        # ---- Predicted DSM error in metres (predictedErrorM) ------------------------
+        # Physics-plus-calibration model. The STRUCTURE (triangulation geometry,
+        # occlusion) is physical; these few PARAMETERS stand in for the MVS algorithm
+        # and should be fitted to real reconstructions (see test 9 --mvs-results).
+        # Starting values are typical of satellite stereo, not calibrated.
+        #   matching precision of one view against a similar view (pixels)
+        self.errSigma0Pix = 0.3
+        #   precision degrades with convergence: x (1 + growth * (conv / ref)^2)
+        self.errConvGrowth = 0.5
+        self.errConvRefDeg = 30.0
+        #   ... and with scale difference between the two views: x (GSD ratio)^exp
+        self.errScaleExp = 1.0
+        #   probability a pair matches: logistic, 50 % at errMatch50Deg convergence
+        self.errMatch50Deg = 45.0
+        self.errMatchWidthDeg = 3.0
+        #   fusion efficiency: share of the ideal multi-view information an MVS
+        #   pipeline realises (median fusion of pairwise depth maps is < 1)
+        self.errFusionEff = 0.7
+        #   systematic floor (orbit-model bias, bundle-adjustment residual):
+        #   errSysM metres if set, otherwise errSysGSD x nadir GSD
+        self.errSysM = None
+        self.errSysGSD = 0.5
+        #   error charged for a point no matchable pair can see (metres). This sets how
+        #   strongly completeness counts against height precision in errRmsM.
+        self.errMissM = 10.0
+        #   scene used for occlusion: "open" (no buildings), "suburban" (~25 % of the
+        #   ground built, 4-12 m) or "urban" (~40 %, 10-50 m)
+        self.errScene = "suburban"
+
     # ---- Geometry helpers ------------------------------------------------------------
     # Pointing angles (along, cross) are measured AT THE SATELLITE. On a spherical
     # Earth the angle at the GROUND is larger: incidence = asin(k sin(offNadir)),
@@ -259,6 +288,193 @@ class imageGeometry:
     def getUsableFraction(self, im):
         """Usability grade of one image: share of its pixels with GSD <= gsdLimit()."""
         return float(np.mean(im <= self.gsdLimit()))
+
+    # =====================================================================================
+    # Predicted DSM error in metres
+    # =====================================================================================
+    # Canonical scenes for occlusion, in metres (1 m cells). Shared by every instance.
+    #   n buildings, footprint range (m), height range (m)
+    SCENES = {
+        "open": dict(n=0, foot=(1, 1), height=(0, 0)),
+        "suburban": dict(n=70, foot=(8, 20), height=(4, 12)),
+        "urban": dict(n=60, foot=(10, 35), height=(10, 50)),
+    }
+    _sceneCache = {}
+    _visCache = {}
+
+    @classmethod
+    def registerScene(cls, name, dsm, cellM=1.0, margin=10):
+        """Use your own DSM (metres, cell size cellM) as an occlusion scene, then set
+        errScene = name. Evaluation points are the cells at least `margin` cells from
+        the edge. Test 9 uses this to give the model the simulator's own city."""
+        dsm = np.asarray(dsm, float)
+        rr, cc = np.meshgrid(np.arange(margin, dsm.shape[0] - margin),
+                             np.arange(margin, dsm.shape[1] - margin), indexing="ij")
+        cls._sceneCache[name] = (dsm, rr.ravel(), cc.ravel(), float(cellM))
+        for k in [k for k in cls._visCache if k[0] == name]:
+            del cls._visCache[k]
+
+    @classmethod
+    def sceneDSM(cls, scene, size=240, margin=60, seed=7):
+        """Fixed synthetic DSM for a scene type, plus the evaluation points: every 1 m
+        cell at least `margin` m from the edge, so rays have scene to cross.
+        Returns (dsm, rows, cols, cell size in metres)."""
+        if scene not in cls._sceneCache:
+            p = cls.SCENES[scene]
+            rng = np.random.default_rng(seed)
+            dsm = np.zeros((size, size))
+            for _ in range(p["n"]):
+                w, l = rng.integers(p["foot"][0], p["foot"][1] + 1, size=2)
+                r, c = rng.integers(0, size - w), rng.integers(0, size - l)
+                dsm[r:r + w, c:c + l] = np.maximum(dsm[r:r + w, c:c + l], rng.uniform(*p["height"]))
+            rr, cc = np.meshgrid(np.arange(margin, size - margin), np.arange(margin, size - margin),
+                                 indexing="ij")
+            cls._sceneCache[scene] = (dsm, rr.ravel(), cc.ravel(), 1.0)
+        return cls._sceneCache[scene]
+
+    def sceneVisibility(self, along, cross, altKm):
+        """Which scene points the view at (along, cross) can see (ray marched toward the
+        satellite over the canonical DSM). Cached per scene and pointing."""
+        key = (self.errScene, round(float(along), 2), round(float(cross), 2),
+               round(float(altKm), 0), self.sphericalEarth)
+        if key in self._visCache:
+            return self._visCache[key]
+        dsm, r0, c0, cell = self.sceneDSM(self.errScene)
+        z0 = dsm[r0, c0]
+        off = float(self.offNadir([[along, cross]])[0])
+        inc = np.radians(float(self.incidenceAngle(off, altKm if self.sphericalEarth else None)))
+        vis = np.ones(len(z0), bool)
+        if dsm.max() > 0 and inc > np.radians(0.25):
+            a, c = np.radians(along), np.radians(cross)
+            az = np.arctan2(np.tan(c), np.tan(a))
+            dr, dc = -np.cos(az), -np.sin(az)         # ground direction toward the satellite
+            rise = cell / np.tan(inc)                  # metres gained per cell travelled
+            n = dsm.shape[0]
+            for k in range(1, int(np.ceil(dsm.max() * np.tan(inc) / cell)) + 2):
+                rr = np.rint(r0 + k * dr).astype(int)
+                cc = np.rint(c0 + k * dc).astype(int)
+                inside = (rr >= 0) & (rr < n) & (cc >= 0) & (cc < n)
+                h = np.zeros(len(z0))
+                h[inside] = dsm[rr[inside], cc[inside]]
+                vis &= ~(inside & (h > z0 + k * rise + 1e-6))
+        self._visCache[key] = vis
+        return vis
+
+    def slantRange(self, offNadirDeg, altKm):
+        """Satellite-to-target distance (m) for an off-nadir angle (spherical Earth)."""
+        th = np.radians(np.asarray(offNadirDeg, float))
+        h = np.asarray(altKm, float) * 1e3
+        if not self.sphericalEarth:
+            return h / np.cos(th)
+        R = self.EARTH_R
+        lam = np.radians(self.incidenceAngle(np.degrees(th), altKm)) - th      # central angle
+        return np.sqrt(R ** 2 + (R + h) ** 2 - 2 * R * (R + h) * np.cos(lam))
+
+    def predictedErrorM(self, ims, imData, imAngles):
+        """
+        Predicted root-mean-square DSM height error (metres) of an image set.
+
+        1. Triangulation geometry (closed form). View i measures with an error
+               sigma_i = sigma_m,i * IFOV * slantRange_i      (perpendicular to its ray)
+           and a ground point seen by a set of views has position covariance
+               Sigma_X = ( sum_i  w_i (I - u_i u_i^T) )^-1 ,   w_i = q_i / sigma_i^2
+           with u_i the unit line of sight at the target (spherical Earth).
+           sigma_z = sqrt(Sigma_X[z, z]) / sqrt(errFusionEff).
+        2. Matching. For every pair (i, j):
+               match probability  p_ij = 1 / (1 + exp((conv_ij - errMatch50Deg) / errMatchWidthDeg))
+               precision          sigma_m,ij = errSigma0Pix * (1 + errConvGrowth (conv_ij/errConvRefDeg)^2)
+                                               * (GSD ratio)^errScaleExp
+           A view only contributes where it has a matchable partner:
+               q_i = 1 - prod_j (1 - p_ij * seen_j)
+           and sigma_m,i is the p-weighted mean of sigma_m,ij over its partners.
+           (Using views, not summing pairs, avoids counting the same view's
+           information once per pair.)
+        3. Completeness (scene). On a canonical DSM (errScene), each view sees only
+           the points no building blocks. A point is reconstructed with probability
+               P_rec = 1 - prod_pairs (1 - p_ij * seen_i * seen_j)
+           Each view's usable share of the target area (GSD limit, footprint)
+           scales how often it is available.
+        4. Systematic floor sigma_sys (orbit-model bias etc.).
+
+            E_rms = sqrt( C * (mean sigma_z^2 + sigma_sys^2) + (1 - C) * errMissM^2 )
+
+        Returns a dict:
+            errRmsM       E_rms (m) - the number to minimise
+            sigmaZM       RMS height error of reconstructed points, incl. sigma_sys (m)
+            completeness  C, share of scene points reconstructed
+            sigmaSysM     the systematic floor used (m)
+        """
+        angles = np.asarray(imAngles, float).reshape(-1, 2)
+        n = len(angles)
+        alt = np.asarray(imData, float)[:, 2]
+        sysM = self.errSysM if self.errSysM is not None else self.errSysGSD * float(self.sens[3])
+        out = dict(errRmsM=float(self.errMissM), sigmaZM=np.nan, completeness=0.0, sigmaSysM=float(sysM))
+        if n < 2:
+            return out
+
+        # --- per-view geometry -------------------------------------------------------
+        off = self.offNadir(angles)
+        altKm = alt if self.sphericalEarth else None
+        u = self.lookVectors(angles, altKm)                       # target frame, z down
+        rho = self.slantRange(off, alt)
+        ifov = float(self.sens[0]) / float(self.sens[2])
+        inc = np.radians(self.incidenceAngle(off, altKm))
+        gsdView = ifov * rho / np.sqrt(np.cos(inc))              # geometric-mean ground GSD
+
+        # --- per-pair matchability and precision -------------------------------------
+        cosc = np.clip(u @ u.T, -1, 1)
+        conv = np.degrees(np.arccos(cosc))
+        P = 1.0 / (1.0 + np.exp((conv - self.errMatch50Deg) / self.errMatchWidthDeg))
+        np.fill_diagonal(P, 0.0)
+        ratio = np.maximum.outer(gsdView, gsdView) / np.minimum.outer(gsdView, gsdView)
+        Sm = (self.errSigma0Pix * (1 + self.errConvGrowth * (conv / self.errConvRefDeg) ** 2)
+              * ratio ** self.errScaleExp)
+
+        # --- availability: usable share of the target area per view ------------------
+        try:
+            _, stack, _ = self.getOverlapRadius(ims, imData)
+            lim = self.gsdLimit()
+            avail = np.array([np.mean(np.isfinite(s) & (s <= lim)) for s in stack])
+        except (ValueError, IndexError):
+            avail = np.array([self.getUsableFraction(im) for im in ims])
+
+        # --- scene visibility ---------------------------------------------------------
+        V = np.column_stack([self.sceneVisibility(a, c, h) for (a, c), h in zip(angles, alt)]).astype(float)
+        Vw = V * avail[None, :]                                   # (M, N) probability view usable at point
+        Pc = np.clip(P, 0, 1 - 1e-9)
+
+        # P_rec: probability at least one matchable pair is usable at the point
+        logNo = np.zeros(len(V))
+        iu, ju = np.triu_indices(n, 1)
+        for i, j in zip(iu, ju):
+            if Pc[i, j] > 1e-6:
+                logNo += np.log1p(-Pc[i, j] * Vw[:, i] * Vw[:, j])
+        Prec = 1.0 - np.exp(logNo)
+        C = float(Prec.mean())
+
+        # q_i: probability view i has a matchable partner at the point
+        L = np.log1p(-Pc)                                         # (N, N), diag 0
+        q = Vw * (1.0 - np.exp(Vw @ L.T))                         # (M, N)
+        # sigma_m,i: p-weighted mean precision over available partners
+        num = Vw @ (Pc * Sm).T
+        den = Vw @ Pc.T
+        smI = np.where(den > 1e-12, num / np.where(den > 1e-12, den, 1), self.errSigma0Pix)
+        sig = smI * ifov * rho[None, :]                           # (M, N) metres
+        w = q / sig ** 2
+
+        Pm = np.eye(3)[None] - u[:, :, None] * u[:, None, :]      # (N, 3, 3)
+        A = np.einsum("mn,nij->mij", w, Pm) + 1e-12 * np.eye(3)[None]
+        good = Prec > 1e-3
+        if not np.any(good):
+            return out
+        Ainv = np.linalg.inv(A[good])
+        varZ = Ainv[:, 2, 2] / self.errFusionEff
+        varZ = np.clip(varZ, 0, self.errMissM ** 2)               # a near-degenerate point is no worse than a miss
+        meanVar = float(np.sum(Prec[good] * varZ) / np.sum(Prec[good]))
+        sigmaZ = np.sqrt(meanVar + sysM ** 2)
+        errRms = np.sqrt(C * sigmaZ ** 2 + (1 - C) * self.errMissM ** 2)
+        out.update(errRmsM=float(errRms), sigmaZM=float(sigmaZ), completeness=C)
+        return out
 
     def getOverlapRadius(self, ims, imData, window="centered",
                         nan_policy="propagate", centerRef="floor",
