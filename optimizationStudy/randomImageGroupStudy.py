@@ -369,44 +369,47 @@ def plotResults(pathCost, pathResult, N_FILES):
         print(f"  random_15_images_{file_nums[i]}: {cost[i]:.4g}")
 
 
-def runTest(pathCost, angFactor):
+def runTest(pathCost, angFactor, N_FILES):
     print()
     print("###################################################################################################")
     print()
 
     noradID = 00000
-    alt = 400
+    alt = 620
     
     #                  FOV, Focal, Pixel #, GSD (m), Swath (m), Alt (m)
-    swath = 5500
-    pixNum = 2560
-    sens = np.array([np.deg2rad(0.7878045564), 3.6, pixNum, swath/pixNum, swath, alt*1e3])
+    swath = 14000
+    pixNum = 46667
+    sens = np.array([np.deg2rad(1.293720698), 25.2, pixNum, swath/pixNum, swath, alt*1e3])
     vec = np.zeros(10) 
 
     aeKM = 6378.137
     altitude = sens[5] / 1e3
-    maxOffNad = 30
+    maxOffNad = 46
 
     gridded = imageGridding(str(noradID), vec, vec, vec, sens, vec)
     angVec = np.array([0, maxOffNad])
     minGSD, maxGSD = gridded.getColorbarMinMax(angVec, altitude)
 
     sigmaPix = 0.5
-    eMax = 25.0
-    
+    eMax = sens[3]
+    # eMax is the error scale in th eMVS error-map term -> baseGSD should be eMax (sens[3])
     imageGeo = imageGeometry(noradID, vec, vec, sens, vec, angVec, minGSD, maxGSD, altitude, sigmaPix, eMax)
 
     BASE_SEED = 20261113            # change to draw a new, still reproducible, batch
-    for j in range(1,501,1):
+    for j in range(1,N_FILES+1,1):
         # Seed from (base, set number) so set j can be regenerated exactly
         rng = np.random.default_rng([BASE_SEED, j])
         nImages = 15
-        imAngles = rng.integers(-maxOffNad, maxOffNad+1, size=(nImages,2))
+        g = np.arange(-maxOffNad, maxOffNad + 1)
+        grid = np.array(np.meshgrid(g, g, indexing="ij")).reshape(2, -1).T
+        cone = grid[imageGeometry.offNadir(grid) <= maxOffNad]
+        imAngles = cone[rng.choice(len(cone), size=nImages, replace=False)]
 
         ims = []
         imData = np.zeros((imAngles.shape[0],3))
         for k in range(imAngles.shape[0]):
-            im = gridded.getGSDMatrix(alt, imAngles[k,0], imAngles[k,1], step=1)
+            im = gridded.getGSDMatrix(alt, imAngles[k,0], imAngles[k,1], step=32)
             ims.append(im)
             imData[k,:] = np.array([imAngles[k,0], imAngles[k,1], alt])
 
@@ -423,11 +426,11 @@ def runTest(pathCost, angFactor):
 
 
 if __name__ == "__main__":
-    pathCost = Path("/exports/nfs_share/Users/al62352/ResolutionHeatmaps/SkySat/SS_R15_Data")   
+    pathCost = Path("/exports/nfs_share/Users/al62352/ResolutionHeatmaps/PleadisNeo/PN_R15_DataNew")   
     angFactor = 1.0
-    runTest(pathCost, angFactor)
+    N_FILES = 250
+    #runTest(pathCost, angFactor, N_FILES)
 
-    pathResult = Path("/exports/nfs_share/Users/al62352/ResolutionHeatmaps/SkySat/SS_R15_Results")   
-    N_FILES = 500
+    pathResult = Path("/exports/nfs_share/Users/al62352/ResolutionHeatmaps/PleadisNeo/PN_R15_ResultsNew")   
     plotResults(pathCost, pathResult, N_FILES)
     
