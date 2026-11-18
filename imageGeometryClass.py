@@ -117,6 +117,42 @@ class imageGeometry:
         #   scene used for occlusion: "open" (no buildings), "suburban" (~25 % of the
         #   ground built, 4-12 m) or "urban" (~40 %, 10-50 m)
         self.errScene = "suburban"
+        #   image dates (optional): pairs taken far apart match worse (season, shadows,
+        #   vegetation, construction). Off until calibrated (errDateMatchTauDays None).
+        #   gap metric: "season" = day-of-year difference (0-182 d), "days" = calendar days
+        #     match probability x exp(-gap / errDateMatchTauDays)
+        #     matching precision x (1 + errDateSigmaGrowth * gap / 365)
+        self.errDateMatchTauDays = None
+        self.errDateSigmaGrowth = 0.0
+        self.errDateMetric = "season"
+
+    # Names of the error-model parameters (calibration files set these)
+    ERR_PARAMS = ("errSigma0Pix", "errConvGrowth", "errConvRefDeg", "errScaleExp", "errMatch50Deg",
+                  "errMatchWidthDeg", "errFusionEff", "errSysM", "errSysGSD", "errMissM",
+                  "errDateMatchTauDays", "errDateSigmaGrowth", "errDateMetric")
+
+    def loadErrorCalibration(self, path):
+        """Set the error-model parameters from a calibration JSON
+        (optimizationStudy/calibration/calibrateErrorModel.py writes one)."""
+        import json
+        d = json.loads(Path(path).read_text())
+        d = d.get("params", d)
+        for k, v in d.items():
+            if k in self.ERR_PARAMS:
+                setattr(self, k, v)
+        return d
+
+    def dateGaps(self, dates):
+        """(N, N) gap in days between image dates (numpy datetime64 or anything
+        np.datetime64 accepts), using errDateMetric."""
+        d = np.asarray(dates, dtype="datetime64[D]")
+        days = d.astype(np.int64).astype(float)
+        gap = np.abs(days[:, None] - days[None, :])
+        if self.errDateMetric == "season":
+            doy = (d - d.astype("datetime64[Y]")).astype(float)
+            g = np.abs(doy[:, None] - doy[None, :])
+            gap = np.minimum(g, 365.25 - g)
+        return gap
 
     # ---- Geometry helpers ------------------------------------------------------------
     # Pointing angles (along, cross) are measured AT THE SATELLITE. On a spherical
@@ -303,14 +339,20 @@ class imageGeometry:
     _visCache = {}
 
     @classmethod
-    def registerScene(cls, name, dsm, cellM=1.0, margin=10):
+    def registerScene(cls, name, dsm, cellM=1.0, margin=10, mask=None):
         """Use your own DSM (metres, cell size cellM) as an occlusion scene, then set
         errScene = name. Evaluation points are the cells at least `margin` cells from
-        the edge. Test 9 uses this to give the model the simulator's own city."""
+        the edge (and, if given, where `mask` is True). Rows run along-track and columns
+        cross-track; for a north-up raster that means along = south, cross = east.
+        Test 9 and the calibration scripts use this."""
         dsm = np.asarray(dsm, float)
         rr, cc = np.meshgrid(np.arange(margin, dsm.shape[0] - margin),
                              np.arange(margin, dsm.shape[1] - margin), indexing="ij")
-        cls._sceneCache[name] = (dsm, rr.ravel(), cc.ravel(), float(cellM))
+        rr, cc = rr.ravel(), cc.ravel()
+        if mask is not None:
+            keep = np.asarray(mask, bool)[rr, cc]
+            rr, cc = rr[keep], cc[keep]
+        cls._sceneCache[name] = (dsm, rr, cc, float(cellM))
         for k in [k for k in cls._visCache if k[0] == name]:
             del cls._visCache[k]
 
@@ -370,7 +412,7 @@ class imageGeometry:
         lam = np.radians(self.incidenceAngle(np.degrees(th), altKm)) - th      # central angle
         return np.sqrt(R ** 2 + (R + h) ** 2 - 2 * R * (R + h) * np.cos(lam))
 
-    def predictedErrorM(self, ims, imData, imAngles):
+    def predictedErrorM(self, ims, imData, imAngles, availability=None, dates=None):
         """
         Predicted root-mean-square DSM height error (metres) of an image set.
 
@@ -397,6 +439,11 @@ class imageGeometry:
         4. Systematic floor sigma_sys (orbit-model bias etc.).
 
             E_rms = sqrt( C * (mean sigma_z^2 + sigma_sys^2) + (1 - C) * errMissM^2 )
+
+        availability : optional per-view usable share (skips the GSD-image calculation;
+                       calibration uses 1.0 because the tiles are small)
+        dates        : optional per-view acquisition dates; with errDateMatchTauDays set,
+                       pairs far apart in date (or season) match less often and less precisely
 
         Returns a dict:
             errRmsM       E_rms (m) - the number to minimise
@@ -429,14 +476,22 @@ class imageGeometry:
         ratio = np.maximum.outer(gsdView, gsdView) / np.minimum.outer(gsdView, gsdView)
         Sm = (self.errSigma0Pix * (1 + self.errConvGrowth * (conv / self.errConvRefDeg) ** 2)
               * ratio ** self.errScaleExp)
+        if dates is not None:
+            gap = self.dateGaps(dates)
+            if self.errDateMatchTauDays:
+                P = P * np.exp(-gap / float(self.errDateMatchTauDays))
+            Sm = Sm * (1 + float(self.errDateSigmaGrowth) * gap / 365.0)
 
         # --- availability: usable share of the target area per view ------------------
-        try:
-            _, stack, _ = self.getOverlapRadius(ims, imData)
-            lim = self.gsdLimit()
-            avail = np.array([np.mean(np.isfinite(s) & (s <= lim)) for s in stack])
-        except (ValueError, IndexError):
-            avail = np.array([self.getUsableFraction(im) for im in ims])
+        if availability is not None:
+            avail = np.broadcast_to(np.asarray(availability, float), (n,)).copy()
+        else:
+            try:
+                _, stack, _ = self.getOverlapRadius(ims, imData)
+                lim = self.gsdLimit()
+                avail = np.array([np.mean(np.isfinite(s) & (s <= lim)) for s in stack])
+            except (ValueError, IndexError):
+                avail = np.array([self.getUsableFraction(im) for im in ims])
 
         # --- scene visibility ---------------------------------------------------------
         V = np.column_stack([self.sceneVisibility(a, c, h) for (a, c), h in zip(angles, alt)]).astype(float)

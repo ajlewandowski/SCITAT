@@ -605,6 +605,8 @@ def commonArgs(description, defaultOut):
                         "height error of reconstructed points only ('sigma')")
     g.add_argument("--scene", default="suburban", choices=["open", "suburban", "urban"],
                    help="occlusion scene for the predicted error (default suburban)")
+    g.add_argument("--calibration", type=Path, default=None,
+                   help="error-model calibration JSON (optimizationStudy/calibration) for the predicted error")
     return p
 
 
@@ -628,6 +630,8 @@ def makeEvaluator(args, **kw):
     ev = CostEvaluator(sensor, **opts)
     if getattr(args, "target_bh", None) is not None:
         ev.geo.targetBH = args.target_bh
+    if getattr(args, "calibration", None) is not None:
+        ev.geo.loadErrorCalibration(args.calibration)
     return ev
 
 

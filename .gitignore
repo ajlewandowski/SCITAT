@@ -4,3 +4,6 @@ __pycache__/
 tatc/resources/de421.bsp
 .venv/
 venv/
+optimizationStudy/calibration/selftest/
+optimizationStudy/calibration/synthetic/
+optimizationStudy/calibration/work/
