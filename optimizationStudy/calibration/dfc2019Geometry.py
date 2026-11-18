@@ -32,12 +32,29 @@ from dfc2019Common import (IMAGE_REGEX, DSM_GLOB, IMAGES_DIR, TRUTH_DIR, METADAT
                            offNadirFromIncidence, scitatAngles)
 
 
+# Tags holding the acquisition time, best first. NITF_IDATIM is the image capture time
+# in DFC2019 / DigitalGlobe NITF-derived tiles; NITF_FDT is the FILE date (when the tile
+# was made, 2017) and must not be used.
+DATE_TAGS = ("NITF_IDATIM", "NITF_STDIDC_ACQUISITION_DATE", "ACQUISITION_DATE", "TIFFTAG_DATETIME")
+NOT_DATE_TAGS = ("NITF_FDT",)
+TITLE_TAGS = ("NITF_IID2", "NITF_FTITLE")      # e.g. 14DEC14WV031100014DEC14160402-M1BS-...
+
+
 def findDate(imgPath, tags, metaIndex):
-    """Acquisition date: TIFF tags with DATE/TIME in the key, then the metadata index
-    (file name -> date), then the file name itself."""
+    """Acquisition date: known capture-time tags, other tags with DATE/TIME in the key,
+    the DigitalGlobe image title (14DEC14WV03...), the metadata index, the file name."""
+    for k in DATE_TAGS:
+        if k in tags and parseDate(tags[k]) is not None:
+            return parseDate(tags[k]), f"tag {k}"
     for k, v in tags.items():
-        if "DATE" in k.upper() or "TIME" in k.upper():
+        if (("DATE" in k.upper() or "TIME" in k.upper() or k.upper().endswith("DATIM"))
+                and k not in NOT_DATE_TAGS):
             d = parseDate(v)
+            if d is not None:
+                return d, f"tag {k}"
+    for k in TITLE_TAGS:
+        if k in tags:
+            d = parseDate(str(tags[k])[:7])          # leading DDMONYY
             if d is not None:
                 return d, f"tag {k}"
     for key in (imgPath.stem, imgPath.stem.rsplit("_", 1)[0]):
@@ -76,7 +93,28 @@ def indexMetadata(metaDir):
     return out
 
 
-def inspect(tiles, n=2):
+def footprintCheck(rpc, imgPath, t, args):
+    """Where the lidar tile lands in the image, under both readings of the lidar .txt
+    corner. The DFC2019 image tiles are cut around the lidar tile, so the right reading
+    puts the tile inside the image, roughly centred, with its lowest points matching."""
+    import rasterio
+    with rasterio.open(imgPath) as s:
+        W, H = s.width, s.height
+    for origin in ("lowerleft", "upperleft"):
+        try:
+            L = LidarTile(t["dsm"], t["cls"], origin=origin)
+        except Exception as e:
+            print(f"    lidar ({origin}): {e}"); return
+        lon, lat, h = L.centerLonLat()
+        c, r = rpc.projection(lon, lat, h)
+        inside = 0 <= c < W and 0 <= r < H
+        print(f"    lidar centre with .txt corner = {origin:<9s}: pixel ({c:7.0f}, {r:7.0f}) in a {W}x{H} image"
+              f" -> {'inside' if inside else 'OUTSIDE'}, {np.hypot(c - W / 2, r - H / 2):.0f} px from its centre")
+        if L.epsg and L.res and not (L.path.with_suffix('.txt').exists()):
+            break
+
+
+def inspect(tiles, args, n=2):
     print(f"Found {len(tiles)} tiles, {sum(len(t['images']) for t in tiles.values())} images.")
     for tile, t in list(tiles.items())[:n]:
         print(f"\n=== tile {tile}: {len(t['images'])} images, DSM: {t['dsm']}, CLS: {t['cls']}")
@@ -84,6 +122,8 @@ def inspect(tiles, n=2):
             print(f"--- {p}")
             tags = readTags(p)
             print("    TIFF tags:", {k: (v[:60] + "...") if len(v) > 60 else v for k, v in tags.items()} or "none")
+            d, src = findDate(p, tags, {})
+            print(f"    acquisition date: {d} ({src})")
             rpc = readRPC(p)
             if rpc is None:
                 print("    RPC: NOT FOUND (looked in GeoTIFF RPC tags and _RPC.TXT/.RPB/.rpc/.txt sidecars)")
@@ -91,9 +131,14 @@ def inspect(tiles, n=2):
                 az, inc = rpc.viewAngles()
                 print(f"    RPC: ok. centre {rpc.lat_off:.4f}N {rpc.long_off:.4f}E; satellite azimuth "
                       f"{az:.1f}°, incidence {inc:.1f}°, GSD {rpc.gsd():.2f} m")
+                if t["dsm"]:
+                    footprintCheck(rpc, p, t, args)
         if t["dsm"]:
+            side = Path(t["dsm"]).with_suffix(".txt")
+            if side.exists():
+                print(f"    lidar .txt: {side.read_text().split()}")
             try:
-                L = LidarTile(t["dsm"], t["cls"])
+                L = LidarTile(t["dsm"], t["cls"], origin=args.origin)
                 lon, lat, h = L.centerLonLat()
                 print(f"    lidar: {L.nrows}x{L.ncols} at {L.res} m, EPSG {L.epsg}, centre {lat:.4f}N {lon:.4f}E, "
                       f"height {np.nanmin(L.z):.1f}–{np.nanmax(L.z):.1f} m")
@@ -129,7 +174,7 @@ def main():
     if not tiles:
         raise SystemExit(f"No images matching {args.image_regex!r} under {args.images}")
     if args.inspect:
-        inspect(tiles)
+        inspect(tiles, args)
         return
 
     metaIndex = indexMetadata(args.metadata)
