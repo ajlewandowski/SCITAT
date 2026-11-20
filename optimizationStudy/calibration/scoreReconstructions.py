@@ -17,6 +17,12 @@ only a vertical median bias is removed (--no-bias keeps it in; the model's syste
 floor errSysM then absorbs it). --shift-search N also searches whole-cell horizontal
 shifts of up to N cells.
 
+Failed pairs: by default a subset that uses a pair with no dsm.tif is skipped. With
+--failed-as-empty, a pair that ran and failed (it has a log.txt) counts as reconstructing
+nothing, so its subsets are scored with that pair contributing no points - a failure is
+then part of the measured result. --exclude-images drops every subset that uses the
+listed images (e.g. cloudy or snowy ones found with checkFailedPairs.py).
+
 Output: <work>/measured.csv, and <work>/fused/<subset_id>.tif if --save-fused.
 
 Run
@@ -76,13 +82,22 @@ def main():
     p.add_argument("--shift-search", type=int, default=0, help="search horizontal shifts up to N cells")
     p.add_argument("--fusion", default="median", choices=["median", "mean"])
     p.add_argument("--save-fused", action="store_true")
+    p.add_argument("--failed-as-empty", action="store_true",
+                   help="a pair that ran and failed counts as reconstructing nothing")
+    p.add_argument("--exclude-images", default="",
+                   help="comma-separated image ids; subsets using any of them are left out")
     args = p.parse_args()
 
     img = pd.read_csv(args.work / "images.csv")
     subsets = pd.read_csv(args.work / "subsets.csv")
     info = img.groupby("tile").first()
     excl = tuple(int(c) for c in args.exclude_classes.split(",") if c.strip())
-    rows, missingPairs = [], set()
+    rows, missingPairs, failedEmpty = [], set(), set()
+    drop = {i.strip() for i in args.exclude_images.split(",") if i.strip()}
+    if drop:
+        n0 = len(subsets)
+        subsets = subsets[[not (set(s.split(";")) & drop) for s in subsets.image_ids]]
+        print(f"--exclude-images: {n0 - len(subsets)} subsets using {len(drop)} images left out")
     for tile, sub in subsets.groupby("tile"):
         cls = info.loc[tile, "cls"] if isinstance(info.loc[tile, "cls"], str) and info.loc[tile, "cls"] else None
         L = LidarTile(info.loc[tile, "lidar"], cls)
@@ -93,8 +108,13 @@ def main():
             key = f"{a}__{b}" if (args.work / "pairs" / f"{a}__{b}").exists() else f"{b}__{a}"
             if key not in cache:
                 f = args.work / "pairs" / key / "dsm.tif"
-                cache[key] = toGrid(f, L) if f.exists() else None
-                if cache[key] is None:
+                if f.exists():
+                    cache[key] = toGrid(f, L)
+                elif args.failed_as_empty and (args.work / "pairs" / key / "log.txt").exists():
+                    cache[key] = np.full((L.nrows, L.ncols), np.nan, np.float32)
+                    failedEmpty.add(key)
+                else:
+                    cache[key] = None
                     missingPairs.add(key)
             return cache[key]
 
@@ -120,6 +140,8 @@ def main():
     df = pd.DataFrame(rows)
     df.to_csv(args.work / "measured.csv", index=False)
     print(f"\n{len(df)} subsets scored -> {args.work / 'measured.csv'}")
+    if failedEmpty:
+        print(f"  {len(failedEmpty)} failed pairs counted as reconstructing nothing")
     if missingPairs:
         print(f"  {len(missingPairs)} pair DSMs missing (failed or not run); subsets using them were skipped")
     if len(df):

@@ -17,6 +17,16 @@ Any other pipeline: --engine-cmd with a command template; placeholders
   {res}            DSM resolution (m)
 e.g. --engine-cmd "bash asp_pair.sh {left} {right} {out_dir} {epsg} {res}"
 
+Height search range (--alt-margin): by default s2p guesses the range of heights to
+search from SIFT matches and the RPC height range, which for some pairs is so wide that
+stereo matching takes over 10 minutes. --alt-margin M instead searches only from the
+tile's lowest lidar height - M to its highest + M (s2p "fixed_altitude_range"). This
+uses the lidar only as a generous height bound (what SRTM or any terrain model would
+give in practice), not as an answer.
+
+Time limits: s2p stops each step after --s2p-timeout seconds (its "timeout" and
+"mgm_timeout", both 600 s by default in s2p).
+
 Run
   python runReconstructions.py --dry-run          # write configs, print commands
   python runReconstructions.py --only JAX_004     # one tile first, to check
@@ -73,7 +83,13 @@ def jobFor(row, args, tiles):
                "images": [{"img": str(left)}, {"img": str(right)}],
                "roi_geojson": roi, "dsm_resolution": float(tile.res),
                "out_crs": f"epsg:{tile.epsg}", "max_processes": args.threads,
-               "clean_intermediate": True, "clean_tmp": True}
+               "clean_intermediate": True, "clean_tmp": True,
+               "timeout": args.s2p_timeout, "mgm_timeout": args.s2p_timeout}
+        if args.alt_margin is not None:
+            z = tile.z[np.isfinite(tile.z)]
+            cfg.update(disp_range_method="fixed_altitude_range",
+                       alt_min=float(np.percentile(z, 0.1) - args.alt_margin),
+                       alt_max=float(np.percentile(z, 99.9) + args.alt_margin))
         cfg.update(json.loads(args.s2p_extra) if args.s2p_extra else {})
         (out / "config.json").write_text(json.dumps(cfg, indent=2))
         cmd = ["s2p", str(out / "config.json")]
@@ -103,17 +119,30 @@ def main():
     p.add_argument("--only", default=None, help="comma-separated tiles to run")
     p.add_argument("--engine-cmd", default=None, help="command template for another pipeline (see above)")
     p.add_argument("--s2p-extra", default=None, help='extra s2p settings as JSON, e.g. \'{"matching_algorithm": "mgm_multi"}\'')
-    p.add_argument("--timeout", type=float, default=3600)
+    p.add_argument("--timeout", type=float, default=7200, help="kill a whole s2p run after this many seconds")
+    p.add_argument("--s2p-timeout", type=int, default=1800, help="s2p's per-step limits (timeout, mgm_timeout)")
+    p.add_argument("--alt-margin", type=float, default=None,
+                   help="search heights within the lidar range +/- this many metres (e.g. 20)")
+    p.add_argument("--redo", action="store_true", help="rerun pairs that already have a dsm.tif")
+    p.add_argument("--pairs", default=None, help="comma-separated pair ids to run (e.g. the failed ones)")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
     pairs = pd.read_csv(args.work / "pairs.csv")
     if args.only:
         pairs = pairs[pairs.tile.isin([t.strip() for t in args.only.split(",")])]
+    if args.pairs:
+        pairs = pairs[pairs.pair_id.isin([t.strip() for t in args.pairs.split(",")])]
     img = pd.read_csv(args.work / "images.csv").groupby("tile").first()
     tiles = {t: LidarTile(img.loc[t, "lidar"], img.loc[t, "cls"] if isinstance(img.loc[t, "cls"], str) else None)
              for t in pairs.tile.unique()}
-    todo = [r for r in pairs.itertuples() if not (args.work / "pairs" / r.pair_id / "dsm.tif").exists()]
+    todo = [r for r in pairs.itertuples()
+            if args.redo or not (args.work / "pairs" / r.pair_id / "dsm.tif").exists()]
+    if args.redo:
+        for r in todo:
+            f = args.work / "pairs" / r.pair_id / "dsm.tif"
+            if f.exists():
+                f.unlink()
     print(f"{len(pairs)} pairs, {len(pairs) - len(todo)} done, {len(todo)} to run")
     jobs = [jobFor(r, args, tiles) for r in todo]
     if args.dry_run:
